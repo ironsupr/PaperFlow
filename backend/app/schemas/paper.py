@@ -14,11 +14,16 @@ class PaperUpdate(PaperBase):
 
 class PaperInDBBase(PaperBase):
     id: int
-    upload_url: str
+    upload_url: Optional[str] = None
+    scholar_url: Optional[str] = None
     user_id: int
+    is_external: int = 0
 
     class Config:
         from_attributes = True
 
 class Paper(PaperInDBBase):
-    pass
+    reference_ids: List[int] = []
+    
+    class Config:
+        from_attributes = True

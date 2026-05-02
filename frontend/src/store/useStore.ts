@@ -56,13 +56,80 @@ export const useStore = create<AppState>((set, get) => ({
       const data = await response.json();
       set({ papers: data });
       
-      const nodes = data.map((p: any, i: number) => ({
-        id: String(p.id),
-        position: { x: 100 + i * 200, y: 100 + (i % 2) * 100 },
-        data: { label: p.title },
-        style: { background: '#1e293b', color: '#fff', border: '1px solid #3b82f6', borderRadius: '8px', padding: '10px' }
-      }));
-      set({ graphData: { nodes, edges: [] } });
+      // Calculate levels for nodes (simple layered layout)
+      const levels: Record<string, number> = {};
+      const adj: Record<string, string[]> = {};
+      const inDegree: Record<string, number> = {};
+      
+      data.forEach((p: any) => {
+        const id = String(p.id);
+        adj[id] = p.reference_ids?.map(String) || [];
+        inDegree[id] = inDegree[id] || 0;
+        adj[id].forEach((refId: string) => {
+          inDegree[refId] = (inDegree[refId] || 0) + 1;
+        });
+      });
+
+      // Simple BFS to determine levels
+      const queue: string[] = data.filter((p: any) => (inDegree[String(p.id)] || 0) === 0).map((p: any) => String(p.id));
+      queue.forEach(id => levels[id] = 0);
+      
+      let head = 0;
+      while (head < queue.length) {
+        const u = queue[head++];
+        adj[u]?.forEach(v => {
+          levels[v] = Math.max(levels[v] || 0, (levels[u] || 0) + 1);
+          if (!queue.includes(v)) queue.push(v);
+        });
+      }
+
+      // Group nodes by level
+      const nodesByLevel: Record<number, string[]> = {};
+      data.forEach((p: any) => {
+        const id = String(p.id);
+        const level = levels[id] || 0;
+        nodesByLevel[level] = nodesByLevel[level] || [];
+        nodesByLevel[level].push(id);
+      });
+
+      const nodes = data.map((p: any) => {
+        const id = String(p.id);
+        const level = levels[id] || 0;
+        const indexInLevel = nodesByLevel[level].indexOf(id);
+        const isExternal = p.is_external === 1;
+        
+        return {
+          id,
+          position: { x: indexInLevel * 250, y: level * 200 },
+          data: { label: p.title, scholarUrl: p.scholar_url },
+          style: { 
+            background: isExternal ? '#0f172a' : '#1e293b', 
+            color: isExternal ? '#94a3b8' : '#fff', 
+            border: isExternal ? '1px dashed #475569' : '1px solid #3b82f6', 
+            borderRadius: '8px', 
+            padding: '10px', 
+            width: 200,
+            opacity: isExternal ? 0.8 : 1
+          }
+        };
+      });
+
+      const edges: any[] = [];
+      data.forEach((p: any) => {
+        if (p.reference_ids) {
+          p.reference_ids.forEach((refId: number) => {
+            edges.push({
+              id: `e${p.id}-${refId}`,
+              source: String(p.id),
+              target: String(refId),
+              animated: true,
+              style: { stroke: '#3b82f6' },
+            });
+          });
+        }
+      });
+
+      set({ graphData: { nodes, edges } });
     } catch (error) {
       console.error('Failed to fetch papers:', error);
     }

@@ -1,14 +1,18 @@
 import { useState } from 'react';
 import { useStore } from '../store/useStore';
-import { Sparkles, BookOpen, Search, Shield, Zap, MessageSquare, Loader2 } from 'lucide-react';
+import { Sparkles, BookOpen, Search, Shield, Zap, MessageSquare, Loader2, GitBranch, Plus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../api/client';
 
 const RightPanel = () => {
-  const { role, selectedPaperId } = useStore();
+  const { role, selectedPaperId, papers, fetchPapers } = useStore();
   const [query, setQuery] = useState('');
   const [responses, setResponses] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showAddRef, setShowAddRef] = useState(false);
+
+  const selectedPaper = papers.find(p => p.id === selectedPaperId);
+  const otherPapers = papers.filter(p => p.id !== selectedPaperId && !selectedPaper?.reference_ids?.includes(p.id));
 
   const handleQuery = async () => {
     if (!query.trim()) return;
@@ -22,6 +26,82 @@ const RightPanel = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleAddReference = async (refId: number) => {
+    if (!selectedPaperId) return;
+    try {
+      await api.addReference(selectedPaperId, refId);
+      await fetchPapers();
+      setShowAddRef(false);
+    } catch (error) {
+      console.error('Failed to add reference:', error);
+    }
+  };
+
+  const renderCitations = () => {
+    if (!selectedPaper) return null;
+
+    return (
+      <div className="p-3 bg-slate-800/50 border border-white/5 rounded-lg space-y-3">
+        <div className="flex items-center justify-between">
+          <h4 className="flex items-center gap-2 text-blue-400 font-semibold text-sm">
+            <GitBranch size={16} /> Citation Tree
+          </h4>
+          <button 
+            onClick={() => setShowAddRef(!showAddRef)}
+            className="p-1 hover:bg-white/10 rounded transition-colors"
+          >
+            <Plus size={16} />
+          </button>
+        </div>
+
+        {showAddRef && (
+          <div className="space-y-2 border-t border-white/10 pt-2 animate-in fade-in slide-in-from-top-1">
+            <p className="text-[10px] text-gray-500 font-bold uppercase">Add Reference</p>
+            <div className="max-h-32 overflow-y-auto custom-scrollbar space-y-1">
+              {otherPapers.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => handleAddReference(p.id)}
+                  className="w-full text-left p-2 hover:bg-blue-600/20 rounded text-xs transition-colors truncate"
+                >
+                  {p.title}
+                </button>
+              ))}
+              {otherPapers.length === 0 && <p className="text-xs text-gray-500 italic">No other papers available</p>}
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-1">
+          <p className="text-[10px] text-gray-500 font-bold uppercase">References ({selectedPaper.reference_ids?.length || 0})</p>
+          <div className="space-y-1">
+            {selectedPaper.reference_ids?.map((refId: number) => {
+              const refPaper = papers.find(p => p.id === refId);
+              const isExternal = refPaper?.is_external === 1;
+              return (
+                <a
+                  key={refId}
+                  href={isExternal && refPaper?.scholar_url ? refPaper.scholar_url : `#`}
+                  target={isExternal && refPaper?.scholar_url ? "_blank" : undefined}
+                  rel={isExternal && refPaper?.scholar_url ? "noopener noreferrer" : undefined}
+                  className={`text-xs flex items-center gap-2 truncate p-1 bg-white/5 rounded ${isExternal && refPaper?.scholar_url ? "text-blue-400 hover:text-blue-300 hover:bg-blue-600/20 cursor-pointer" : "text-gray-300"} transition-colors`}
+                >
+                  <div className={`w-1 h-1 rounded-full ${isExternal ? "bg-green-500" : "bg-blue-500"}`} />
+                  <span className="truncate">{refPaper?.title || `Paper #${refId}`}</span>
+                  {isExternal && refPaper?.scholar_url && (
+                    <svg className="w-3 h-3 ml-auto flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  )}
+                </a>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const renderRoleSpecificContent = () => {
@@ -108,6 +188,8 @@ const RightPanel = () => {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-4">
+        {renderCitations()}
+        
         {responses.map((res, i) => (
           <div key={i} className="space-y-2">
             <div className="flex justify-end">

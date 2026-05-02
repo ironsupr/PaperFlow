@@ -32,4 +32,12 @@ export const api = {
     const response = await client.get('/papers/');
     return response.data;
   },
+  addReference: async (paperId: number, refId: number) => {
+    const response = await client.post(`/papers/${paperId}/references/${refId}`);
+    return response.data;
+  },
+  deletePaper: async (id: number) => {
+    const response = await client.delete(`/papers/${id}`);
+    return response.data;
+  },
 };

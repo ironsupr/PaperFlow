@@ -1,5 +1,5 @@
 from typing import Any, List
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
 from sqlalchemy.orm import Session
 from app.api import deps
 from app.models.user import User
@@ -14,9 +14,10 @@ async def upload_paper(
     *,
     db: Session = Depends(deps.get_db),
     file: UploadFile = File(...),
-    current_user: User = Depends(deps.get_current_user)
+    current_user: User = Depends(deps.get_current_user),
+    background_tasks: BackgroundTasks
 ) -> Any:
-    return await paper_service.process_paper(db, file, current_user.id)
+    return await paper_service.process_paper(db, file, current_user.id, background_tasks)
 
 @router.get("/", response_model=List[PaperSchema])
 def read_papers(
@@ -38,3 +39,40 @@ def read_paper(
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found")
     return paper
+
+@router.post("/{id}/references/{ref_id}", response_model=PaperSchema)
+def add_paper_reference(
+    *,
+    db: Session = Depends(deps.get_db),
+    id: int,
+    ref_id: int,
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    paper = db.query(PaperModel).filter(PaperModel.id == id, PaperModel.user_id == current_user.id).first()
+    reference = db.query(PaperModel).filter(PaperModel.id == ref_id, PaperModel.user_id == current_user.id).first()
+    
+    if not paper or not reference:
+        raise HTTPException(status_code=404, detail="Paper or reference not found")
+    
+    if reference not in paper.references:
+        paper.references.append(reference)
+        db.add(paper)
+        db.commit()
+        db.refresh(paper)
+    
+    return paper
+
+@router.delete("/{id}", response_model=dict)
+def delete_paper(
+    *,
+    db: Session = Depends(deps.get_db),
+    id: int,
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    paper = db.query(PaperModel).filter(PaperModel.id == id, PaperModel.user_id == current_user.id).first()
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+    
+    db.delete(paper)
+    db.commit()
+    return {"status": "success", "message": "Paper deleted"}
