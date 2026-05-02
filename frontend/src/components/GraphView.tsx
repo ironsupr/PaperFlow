@@ -20,17 +20,12 @@ const nodeTypes = {
 };
 
 const GraphView = () => {
-  const { graphData, setSelectedPaperId, focusedPaperId, setFocusedPaperId, papers, fetchPapers } = useStore();
+  const { graphData, setSelectedPaperId, focusedPaperId, setFocusedPaperId, papers } = useStore();
   const [menu, setMenu] = useState<{ id: string; top: number; left: number } | null>(null);
   const [edgeContext, setEdgeContext] = useState<string[] | null>(null);
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-
-  // Recalculate layout in store when focus changes
-  useEffect(() => {
-    fetchPapers();
-  }, [focusedPaperId]);
 
   // Sync local ReactFlow state with store data
   useEffect(() => {

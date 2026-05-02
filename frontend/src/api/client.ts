@@ -40,4 +40,8 @@ export const api = {
     const response = await client.delete(`/papers/${id}`);
     return response.data;
   },
+  clearWorkspace: async () => {
+    const response = await client.delete('/papers/clear/all');
+    return response.data;
+  },
 };

@@ -19,6 +19,7 @@ interface AppState {
   papers: any[];
   setPapers: (papers: any[]) => void;
   fetchPapers: () => Promise<void>;
+  calculateLayout: () => void;
   isProcessing: boolean;
   setIsProcessing: (is: boolean) => void;
 }
@@ -41,11 +42,119 @@ export const useStore = create<AppState>((set, get) => ({
   selectedPaperId: null,
   setSelectedPaperId: (id) => set({ selectedPaperId: id }),
   focusedPaperId: null,
-  setFocusedPaperId: (id) => set({ focusedPaperId: id }),
+  setFocusedPaperId: (id) => {
+    set({ focusedPaperId: id });
+    get().calculateLayout(); // Instantly update layout locally
+  },
   graphData: { nodes: [], edges: [] },
   setGraphData: (data) => set({ graphData: data }),
   papers: [],
   setPapers: (papers) => set({ papers }),
+
+  calculateLayout: () => {
+    const { papers, focusedPaperId } = get();
+    if (!papers.length) return;
+
+    // Calculate levels for nodes (layered layout)
+    const levels: Record<string, number> = {};
+    const adj: Record<string, string[]> = {};
+    const inDegree: Record<string, number> = {};
+    
+    papers.forEach((p: any) => {
+      const id = String(p.id);
+      adj[id] = p.reference_ids?.map(String) || [];
+      inDegree[id] = inDegree[id] || 0;
+      adj[id].forEach((refId: string) => {
+        inDegree[refId] = (inDegree[refId] || 0) + 1;
+      });
+    });
+
+    // BFS to determine levels
+    const queue: string[] = papers.filter((p: any) => (inDegree[String(p.id)] || 0) === 0).map((p: any) => String(p.id));
+    queue.forEach(id => levels[id] = 0);
+    
+    let head = 0;
+    while (head < queue.length) {
+      const u = queue[head++];
+      adj[u]?.forEach(v => {
+        levels[v] = Math.max(levels[v] || 0, (levels[u] || 0) + 1);
+        if (!queue.includes(v)) queue.push(v);
+      });
+    }
+
+    const nodesByLevel: Record<number, string[]> = {};
+    papers.forEach((p: any) => {
+      const id = String(p.id);
+      const level = levels[id] || 0;
+      nodesByLevel[level] = nodesByLevel[level] || [];
+      nodesByLevel[level].push(id);
+    });
+
+    const nodes = papers.map((p: any) => {
+      const id = String(p.id);
+      const isExternal = p.is_external === 1;
+      let position = { x: 0, y: 0 };
+      
+      if (focusedPaperId) {
+        if (id === String(focusedPaperId)) {
+          position = { x: 500, y: 500 };
+        } else {
+          const neighbors = papers.filter((paper: any) => 
+            paper.id !== focusedPaperId && 
+            (paper.reference_ids?.includes(focusedPaperId) || p.reference_ids?.includes(paper.id))
+          );
+          const index = neighbors.findIndex((n: any) => String(n.id) === id);
+          if (index !== -1) {
+            const angle = (index / neighbors.length) * 2 * Math.PI;
+            const radius = 450;
+            position = {
+              x: 500 + radius * Math.cos(angle),
+              y: 500 + radius * Math.sin(angle)
+            };
+          } else {
+            // Non-neighbors are hidden anyway in component but need a position
+            position = { x: 0, y: 0 };
+          }
+        }
+      } else {
+        const level = levels[id] || 0;
+        const indexInLevel = nodesByLevel[level]?.indexOf(id) || 0;
+        position = { x: indexInLevel * 350, y: level * 300 };
+      }
+      
+      return {
+        id,
+        position,
+        type: 'paper',
+        data: { 
+          label: p.title, 
+          scholarUrl: p.scholar_url,
+          authors: p.authors,
+          isExternal: isExternal
+        },
+      };
+    });
+
+    const edges: any[] = [];
+    papers.forEach((p: any) => {
+      if (p.reference_ids) {
+        p.reference_ids.forEach((refId: number) => {
+          const context = p.citation_contexts ? p.citation_contexts[String(refId)] : null;
+          edges.push({
+            id: `e${p.id}-${refId}`,
+            source: String(p.id),
+            target: String(refId),
+            animated: true,
+            data: { context },
+            style: { stroke: '#3b82f6' },
+          });
+        });
+      }
+    });
+
+    set({ graphData: { nodes, edges } });
+  },
+
   fetchPapers: async () => {
     const { token } = get();
     if (!token) return;
@@ -59,108 +168,7 @@ export const useStore = create<AppState>((set, get) => ({
       }
       const data = await response.json();
       set({ papers: data });
-      
-      // Calculate levels for nodes (simple layered layout)
-      const levels: Record<string, number> = {};
-      const adj: Record<string, string[]> = {};
-      const inDegree: Record<string, number> = {};
-      
-      data.forEach((p: any) => {
-        const id = String(p.id);
-        adj[id] = p.reference_ids?.map(String) || [];
-        inDegree[id] = inDegree[id] || 0;
-        adj[id].forEach((refId: string) => {
-          inDegree[refId] = (inDegree[refId] || 0) + 1;
-        });
-      });
-
-      // Simple BFS to determine levels
-      const queue: string[] = data.filter((p: any) => (inDegree[String(p.id)] || 0) === 0).map((p: any) => String(p.id));
-      queue.forEach(id => levels[id] = 0);
-      
-      let head = 0;
-      while (head < queue.length) {
-        const u = queue[head++];
-        adj[u]?.forEach(v => {
-          levels[v] = Math.max(levels[v] || 0, (levels[u] || 0) + 1);
-          if (!queue.includes(v)) queue.push(v);
-        });
-      }
-
-      // Group nodes by level
-      const nodesByLevel: Record<number, string[]> = {};
-      data.forEach((p: any) => {
-        const id = String(p.id);
-        const level = levels[id] || 0;
-        nodesByLevel[level] = nodesByLevel[level] || [];
-        nodesByLevel[level].push(id);
-      });
-
-      const nodes = data.map((p: any) => {
-        const id = String(p.id);
-        const isExternal = p.is_external === 1;
-        const focusedId = get().focusedPaperId;
-        
-        let position = { x: 0, y: 0 };
-        
-        if (focusedId) {
-          if (id === String(focusedId)) {
-            // Source paper in center
-            position = { x: 500, y: 500 };
-          } else {
-            // Arrange neighbors in a circle
-            const neighbors = data.filter((paper: any) => 
-              paper.id !== focusedId && 
-              (paper.reference_ids?.includes(focusedId) || p.reference_ids?.includes(paper.id))
-            );
-            const index = neighbors.findIndex((n: any) => String(n.id) === id);
-            if (index !== -1) {
-              const angle = (index / neighbors.length) * 2 * Math.PI;
-              const radius = 400;
-              position = {
-                x: 500 + radius * Math.cos(angle),
-                y: 500 + radius * Math.sin(angle)
-              };
-            }
-          }
-        } else {
-          // Standard layered layout
-          const level = levels[id] || 0;
-          const indexInLevel = nodesByLevel[level]?.indexOf(id) || 0;
-          position = { x: indexInLevel * 300, y: level * 250 };
-        }
-        
-        return {
-          id,
-          position,
-          type: 'paper',
-          data: { 
-            label: p.title, 
-            scholarUrl: p.scholar_url,
-            authors: p.authors,
-            isExternal: isExternal
-          },
-        };
-      });
-
-      const edges: any[] = [];
-      data.forEach((p: any) => {
-        if (p.reference_ids) {
-          p.reference_ids.forEach((refId: number) => {
-            const context = p.citation_contexts ? p.citation_contexts[String(refId)] : null;
-            edges.push({
-              id: `e${p.id}-${refId}`,
-              source: String(p.id),
-              target: String(refId),
-              animated: true,
-              data: { context },
-              style: { stroke: '#3b82f6' },
-            });
-          });
-        }
-      });
-
-      set({ graphData: { nodes, edges } });
+      get().calculateLayout(); // Calculate layout locally after fetching
     } catch (error) {
       console.error('Failed to fetch papers:', error);
     }

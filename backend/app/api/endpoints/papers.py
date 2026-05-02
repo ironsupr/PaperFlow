@@ -1,6 +1,6 @@
 from typing import Any, List
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.api import deps
 from app.models.user import User
 from app.schemas.paper import Paper as PaperSchema
@@ -26,7 +26,10 @@ def read_papers(
     skip: int = 0,
     limit: int = 100,
 ) -> Any:
-    return db.query(PaperModel).filter(PaperModel.user_id == current_user.id).offset(skip).limit(limit).all()
+    return db.query(PaperModel)\
+        .options(joinedload(PaperModel.references))\
+        .filter(PaperModel.user_id == current_user.id)\
+        .offset(skip).limit(limit).all()
 
 @router.get("/{id}", response_model=PaperSchema)
 def read_paper(
@@ -76,3 +79,13 @@ def delete_paper(
     db.delete(paper)
     db.commit()
     return {"status": "success", "message": "Paper deleted"}
+
+@router.delete("/clear/all", response_model=dict)
+def clear_all_papers(
+    *,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    db.query(PaperModel).filter(PaperModel.user_id == current_user.id).delete()
+    db.commit()
+    return {"status": "success", "message": "Workspace cleared"}
