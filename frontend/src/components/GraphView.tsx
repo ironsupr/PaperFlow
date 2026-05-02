@@ -1,38 +1,48 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import ReactFlow, { 
   Background, 
   Controls, 
   MarkerType, 
   MiniMap,
   Panel,
-  applyNodeChanges,
-  applyEdgeChanges
+  useNodesState,
+  useEdgesState,
 } from 'reactflow';
-import type { Node, Edge, NodeChange, EdgeChange } from 'reactflow';
+import type { Node, Edge } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useStore } from '../store/useStore';
 import ContextMenu from './ContextMenu';
-import { Maximize2, MessageSquare } from 'lucide-react';
+import PaperNode from './PaperNode';
+import { Maximize2, MessageSquare, Layers, Loader2 } from 'lucide-react';
+
+const nodeTypes = {
+  paper: PaperNode,
+};
 
 const GraphView = () => {
-  const { graphData, setSelectedPaperId, focusedPaperId, setFocusedPaperId, papers } = useStore();
+  const { graphData, setSelectedPaperId, focusedPaperId, setFocusedPaperId, papers, fetchPapers } = useStore();
   const [menu, setMenu] = useState<{ id: string; top: number; left: number } | null>(null);
   const [edgeContext, setEdgeContext] = useState<string[] | null>(null);
 
-  // Local state for ReactFlow to handle dragging and updates correctly
-  const [nodes, setNodes] = useState<Node[]>([]);
-  const [edges, setEdges] = useState<Edge[]>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
-  // Update local nodes/edges when store data changes or focus changes
-  React.useEffect(() => {
-    let filteredNodes = graphData.nodes;
-    let filteredEdges = graphData.edges;
+  // Recalculate layout in store when focus changes
+  useEffect(() => {
+    fetchPapers();
+  }, [focusedPaperId]);
+
+  // Sync local ReactFlow state with store data
+  useEffect(() => {
+    if (!graphData.nodes.length) return;
+
+    let filteredNodes = [...graphData.nodes];
+    let filteredEdges = [...graphData.edges];
 
     if (focusedPaperId) {
       const focusedIdStr = String(focusedPaperId);
       const connectedNodeIds = new Set<string>([focusedIdStr]);
       
-      // Find direct connections
       graphData.edges.forEach(edge => {
         if (edge.source === focusedIdStr) connectedNodeIds.add(edge.target);
         if (edge.target === focusedIdStr) connectedNodeIds.add(edge.source);
@@ -51,29 +61,16 @@ const GraphView = () => {
         type: MarkerType.ArrowClosed,
         color: '#3b82f6',
       },
-      style: { stroke: '#3b82f6', strokeWidth: 2 },
+      style: { stroke: '#3b82f6', strokeWidth: 2, opacity: 0.6 },
       animated: true,
     })));
-  }, [graphData, focusedPaperId]);
+  }, [graphData, focusedPaperId, setNodes, setEdges]);
 
-  const onNodesChange = useCallback(
-    (changes: NodeChange[]) => setNodes((nds) => applyNodeChanges(changes, nds)),
-    []
-  );
-  const onEdgesChange = useCallback(
-    (changes: EdgeChange[]) => setEdges((eds) => applyEdgeChanges(changes, eds)),
-    []
-  );
-
-  const onNodeClick = (_: any, node: any) => {
-    const paper = papers.find(p => p.id === Number(node.id));
-    if (paper?.is_external === 1 && paper?.scholar_url) {
-      window.open(paper.scholar_url, '_blank');
-    }
+  const onNodeClick = useCallback((_: any, node: any) => {
     setSelectedPaperId(Number(node.id));
     setMenu(null);
     setEdgeContext(null);
-  };
+  }, [setSelectedPaperId]);
 
   const onEdgeClick = useCallback((_: any, edge: Edge) => {
     if (edge.data?.context) {
@@ -101,10 +98,20 @@ const GraphView = () => {
   }, []);
 
   return (
-    <div style={{ width: '100%', height: '100%' }} onClick={onPaneClick}>
+    <div className="w-full h-full relative bg-[#0f172a]" onClick={onPaneClick}>
+      {nodes.length === 0 && (
+        <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="text-blue-500 animate-spin" size={32} />
+            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">Initializing Neural Map</p>
+          </div>
+        </div>
+      )}
+      
       <ReactFlow
         nodes={nodes}
         edges={edges}
+        nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
@@ -119,49 +126,59 @@ const GraphView = () => {
         zoomOnScroll={true}
         zoomOnPinch={true}
         zoomOnDoubleClick={true}
-        style={{ background: '#0f172a' }}
+        style={{ width: '100%', height: '100%', background: 'radial-gradient(circle at center, #1e293b 0%, #0f172a 100%)' }}
       >
-        <Background color="#334155" gap={20} size={1} />
-        <Controls />
+        <Background color="#334155" gap={30} size={1} variant="dots" />
+        
+        <Controls className="bg-slate-900 border border-white/10 fill-white !shadow-2xl" />
+        
         <MiniMap 
           nodeColor={(node) => {
-            return (node.style?.background as string) || '#1e293b';
+            return (node.data?.isExternal ? '#334155' : '#3b82f6');
           }}
-          maskColor="rgba(15, 23, 42, 0.7)"
-          style={{ background: '#1e293b' }}
+          maskColor="rgba(15, 23, 42, 0.8)"
+          className="bg-slate-900/50 backdrop-blur-md border border-white/10 rounded-lg overflow-hidden !m-4"
         />
-        <Panel position="top-right">
-          <div className="flex flex-col gap-2 items-end">
-            <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedPaperId(null);
-                setFocusedPaperId(null);
-                setEdgeContext(null);
-              }}
-              className="p-2 bg-slate-800 border border-white/10 rounded-lg hover:bg-slate-700 transition-colors text-white flex items-center gap-2 text-xs font-semibold shadow-lg"
+
+        <Panel position="top-right" className="flex flex-col gap-3 items-end">
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedPaperId(null);
+              setFocusedPaperId(null);
+              setEdgeContext(null);
+            }}
+            className="group flex items-center gap-2 bg-slate-900/80 backdrop-blur-xl border border-white/10 px-4 py-2.5 rounded-xl hover:border-blue-500/50 transition-all shadow-2xl text-white text-xs font-bold"
+          >
+            <Layers size={14} className="text-blue-400 group-hover:rotate-12 transition-transform" />
+            Clear Focus & Reset
+          </button>
+          
+          {edgeContext && (
+            <div 
+              className="p-5 bg-slate-900/90 backdrop-blur-2xl border border-blue-500/30 rounded-2xl w-80 shadow-2xl animate-in fade-in slide-in-from-right-4 ring-1 ring-blue-500/20" 
+              onClick={e => e.stopPropagation()}
             >
-              <Maximize2 size={14} /> Reset View
-            </button>
-            
-            {edgeContext && (
-              <div className="mt-4 p-4 bg-slate-800/90 backdrop-blur-md border border-blue-500/30 rounded-xl w-80 shadow-2xl animate-in fade-in slide-in-from-right-4" onClick={e => e.stopPropagation()}>
-                <h5 className="text-blue-400 font-bold text-[10px] uppercase tracking-widest mb-2 flex items-center gap-2">
-                  <MessageSquare size={12} /> Citation Context
-                </h5>
-                <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
-                  {edgeContext.map((c, i) => (
-                    <p key={i} className="text-xs text-gray-200 italic leading-relaxed border-l-2 border-blue-500/30 pl-2">
-                      "{c}"
-                    </p>
-                  ))}
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-blue-600/20 rounded-lg">
+                  <MessageSquare size={16} className="text-blue-400" />
                 </div>
+                <h5 className="text-white font-bold text-xs uppercase tracking-widest">
+                  Citation Context
+                </h5>
               </div>
-            )}
-          </div>
+              <div className="space-y-3 max-h-60 overflow-y-auto custom-scrollbar pr-2">
+                {edgeContext.map((c, i) => (
+                  <p key={i} className="text-[11px] text-slate-300 italic leading-relaxed border-l-2 border-blue-500/40 pl-3 py-1">
+                    "{c}"
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
         </Panel>
       </ReactFlow>
-      {menu && <ContextMenu onClick={onPaneClick} {...menu} onClose={() => setMenu(null)} />}
+      {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
     </div>
   );
 };

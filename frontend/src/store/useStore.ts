@@ -98,23 +98,48 @@ export const useStore = create<AppState>((set, get) => ({
 
       const nodes = data.map((p: any) => {
         const id = String(p.id);
-        const level = levels[id] || 0;
-        const indexInLevel = nodesByLevel[level].indexOf(id);
         const isExternal = p.is_external === 1;
+        const focusedId = get().focusedPaperId;
+        
+        let position = { x: 0, y: 0 };
+        
+        if (focusedId) {
+          if (id === String(focusedId)) {
+            // Source paper in center
+            position = { x: 500, y: 500 };
+          } else {
+            // Arrange neighbors in a circle
+            const neighbors = data.filter((paper: any) => 
+              paper.id !== focusedId && 
+              (paper.reference_ids?.includes(focusedId) || p.reference_ids?.includes(paper.id))
+            );
+            const index = neighbors.findIndex((n: any) => String(n.id) === id);
+            if (index !== -1) {
+              const angle = (index / neighbors.length) * 2 * Math.PI;
+              const radius = 400;
+              position = {
+                x: 500 + radius * Math.cos(angle),
+                y: 500 + radius * Math.sin(angle)
+              };
+            }
+          }
+        } else {
+          // Standard layered layout
+          const level = levels[id] || 0;
+          const indexInLevel = nodesByLevel[level]?.indexOf(id) || 0;
+          position = { x: indexInLevel * 300, y: level * 250 };
+        }
         
         return {
           id,
-          position: { x: indexInLevel * 250, y: level * 200 },
-          data: { label: p.title, scholarUrl: p.scholar_url },
-          style: { 
-            background: isExternal ? '#0f172a' : '#1e293b', 
-            color: isExternal ? '#94a3b8' : '#fff', 
-            border: isExternal ? '1px dashed #475569' : '1px solid #3b82f6', 
-            borderRadius: '8px', 
-            padding: '10px', 
-            width: 200,
-            opacity: isExternal ? 0.8 : 1
-          }
+          position,
+          type: 'paper',
+          data: { 
+            label: p.title, 
+            scholarUrl: p.scholar_url,
+            authors: p.authors,
+            isExternal: isExternal
+          },
         };
       });
 
