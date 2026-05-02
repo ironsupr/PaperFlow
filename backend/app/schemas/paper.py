@@ -18,6 +18,7 @@ class PaperInDBBase(PaperBase):
     scholar_url: Optional[str] = None
     user_id: int
     is_external: int = 0
+    citation_contexts: Optional[dict] = None
 
     class Config:
         from_attributes = True

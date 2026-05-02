@@ -12,6 +12,8 @@ interface AppState {
   setRole: (role: UserRole) => void;
   selectedPaperId: number | null;
   setSelectedPaperId: (id: number | null) => void;
+  focusedPaperId: number | null;
+  setFocusedPaperId: (id: number | null) => void;
   graphData: { nodes: any[]; edges: any[] };
   setGraphData: (data: { nodes: any[]; edges: any[] }) => void;
   papers: any[];
@@ -38,6 +40,8 @@ export const useStore = create<AppState>((set, get) => ({
   setRole: (role) => set({ role }),
   selectedPaperId: null,
   setSelectedPaperId: (id) => set({ selectedPaperId: id }),
+  focusedPaperId: null,
+  setFocusedPaperId: (id) => set({ focusedPaperId: id }),
   graphData: { nodes: [], edges: [] },
   setGraphData: (data) => set({ graphData: data }),
   papers: [],
@@ -118,11 +122,13 @@ export const useStore = create<AppState>((set, get) => ({
       data.forEach((p: any) => {
         if (p.reference_ids) {
           p.reference_ids.forEach((refId: number) => {
+            const context = p.citation_contexts ? p.citation_contexts[String(refId)] : null;
             edges.push({
               id: `e${p.id}-${refId}`,
               source: String(p.id),
               target: String(refId),
               animated: true,
+              data: { context },
               style: { stroke: '#3b82f6' },
             });
           });

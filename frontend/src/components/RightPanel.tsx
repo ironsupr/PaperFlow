@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../api/client';
 
 const RightPanel = () => {
-  const { role, selectedPaperId, papers, fetchPapers } = useStore();
+  const { role, selectedPaperId, papers, fetchPapers, setFocusedPaperId, focusedPaperId } = useStore();
   const [query, setQuery] = useState('');
   const [responses, setResponses] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -13,6 +13,8 @@ const RightPanel = () => {
 
   const selectedPaper = papers.find(p => p.id === selectedPaperId);
   const otherPapers = papers.filter(p => p.id !== selectedPaperId && !selectedPaper?.reference_ids?.includes(p.id));
+
+  const isFocused = focusedPaperId === selectedPaperId;
 
   const handleQuery = async () => {
     if (!query.trim()) return;
@@ -45,9 +47,18 @@ const RightPanel = () => {
     return (
       <div className="p-3 bg-slate-800/50 border border-white/5 rounded-lg space-y-3">
         <div className="flex items-center justify-between">
-          <h4 className="flex items-center gap-2 text-blue-400 font-semibold text-sm">
-            <GitBranch size={16} /> Citation Tree
-          </h4>
+          <div className="flex items-center gap-2">
+            <h4 className="flex items-center gap-2 text-blue-400 font-semibold text-sm">
+              <GitBranch size={16} /> Citation Tree
+            </h4>
+            <button 
+              onClick={() => setFocusedPaperId(isFocused ? null : selectedPaperId)}
+              className={`p-1 rounded transition-colors ${isFocused ? 'bg-blue-500 text-white' : 'hover:bg-blue-500/20 text-blue-400'}`}
+              title={isFocused ? "Clear Focus" : "Visualize Focused Graph"}
+            >
+              <Zap size={14} fill={isFocused ? "currentColor" : "none"} />
+            </button>
+          </div>
           <button 
             onClick={() => setShowAddRef(!showAddRef)}
             className="p-1 hover:bg-white/10 rounded transition-colors"

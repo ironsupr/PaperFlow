@@ -23,6 +23,7 @@ class Paper(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     metadata_json = Column(JSON, nullable=True)
     is_external = Column(Integer, default=0) # 0 for uploaded, 1 for fetched
+    citation_contexts = Column(JSON, nullable=True) # { "ref_id": ["context1", "context2"] }
 
     owner = relationship("User")
     
