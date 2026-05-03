@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import * as ResizablePanels from 'react-resizable-panels';
 import GraphView from './GraphView';
 import RightPanel from './RightPanel';
 import LeftSidebar from './LeftSidebar';
 import PaperReader from './PaperReader';
+import FloatingReader from './FloatingReader';
 import { useStore } from '../store/useStore';
+import { AnimatePresence } from 'framer-motion';
 import { 
   Files, 
   Search,
@@ -21,16 +23,25 @@ import {
 } from 'lucide-react';
 
 const Workspace = () => {
-  const { fetchPapers, activeReaderId, logout } = useStore();
-  const [leftSidebarVisible, setLeftSidebarVisible] = useState(true);
-  const [rightSidebarVisible, setRightSidebarVisible] = useState(true);
+  const { 
+    fetchPapers, 
+    activeReaderId, 
+    logout, 
+    floatingReaderIds, 
+    removeFloatingReader,
+    maximizedReaderId,
+    leftSidebarVisible,
+    setLeftSidebarVisible,
+    rightSidebarVisible,
+    setRightSidebarVisible
+  } = useStore();
 
   useEffect(() => {
     fetchPapers();
   }, [fetchPapers]);
 
   return (
-    <div className="flex flex-col h-screen w-full bg-background overflow-hidden text-foreground font-sans selection:bg-primary/10">
+    <div className="flex flex-col h-screen w-full bg-background overflow-hidden text-foreground font-sans selection:bg-primary/10 relative">
       <div className="flex flex-1 overflow-hidden">
         {/* Activity Bar - Far Left (VS Code Style) */}
         <div className="w-12 border-r border-border flex flex-col items-center py-4 bg-background z-50 shrink-0">
@@ -144,6 +155,22 @@ const Workspace = () => {
           </ResizablePanels.PanelGroup>
         </div>
       </div>
+
+      {/* Floating Readers Layer */}
+      <AnimatePresence>
+        {floatingReaderIds.map(id => (
+          <FloatingReader key={id} paperId={id} onClose={() => removeFloatingReader(id)} />
+        ))}
+      </AnimatePresence>
+
+      {/* Maximized Reader Layer */}
+      <AnimatePresence>
+        {maximizedReaderId && (
+          <div className="fixed inset-0 z-[250] bg-background animate-in fade-in zoom-in-95 duration-300">
+            <PaperReader isMaximized />
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Status Bar - Bottom */}
       <div className="h-6 bg-primary text-primary-foreground border-t border-border flex items-center justify-between px-3 text-[10px] mono font-medium z-50">

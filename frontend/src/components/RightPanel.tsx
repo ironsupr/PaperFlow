@@ -56,11 +56,14 @@ const RightPanel = () => {
     reviewerBias,
     reviewerReport,
     isReviewerLoading,
+    activeIntelligenceTab,
     setDiscoveryState,
-    setReviewerState
+    setReviewerState,
+    setActiveIntelligenceTab
   } = useStore();
   
-  const [activeTab, setActiveTab] = useState<'intelligence' | 'citations' | 'discovery' | 'podcast' | 'critique'>('intelligence');
+  const activeTab = activeIntelligenceTab;
+  const setActiveTab = setActiveIntelligenceTab;
   
   // Intelligence State
   const [summaryLevel, setSummaryLevel] = useState<'beginner' | 'intermediate' | 'technical'>('intermediate');

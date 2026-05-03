@@ -97,11 +97,14 @@ const GraphView = () => {
   const onNodeContextMenu = useCallback(
     (event: React.MouseEvent, node: Node) => {
       event.preventDefault();
-      setMenu({
-        id: node.id,
-        top: event.clientY,
-        left: event.clientX,
-      });
+      // Only show for papers for now
+      if (node.type === 'paper') {
+        setMenu({
+          id: node.id, // e.g. paper_1
+          top: event.clientY,
+          left: event.clientX,
+        });
+      }
     },
     [setMenu]
   );

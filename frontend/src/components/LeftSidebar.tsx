@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { 
   GraduationCap, 
   Microscope, 
@@ -20,23 +20,25 @@ import {
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { api } from '../api/client';
+import ContextMenu from './ContextMenu';
 
 const LeftSidebar = () => {
   const { 
     role, 
-    setRole, 
     setIsProcessing, 
     fetchPapers, 
     papers, 
-    setSelectedPaperId, 
     selectedPaperId,
     selectedMultiPaperIds,
     toggleMultiPaperSelection,
     setCrossPaperAnalysis,
     setPodcastData,
-    setDiscoveryState
+    setDiscoveryState,
+    setActiveIntelligenceTab,
+    setActiveReaderId
   } = useStore();
   
+  const [menu, setMenu] = useState<{ id: string; top: number; left: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const onUploadClick = () => {
@@ -51,9 +53,7 @@ const LeftSidebar = () => {
         for (let i = 0; i < files.length; i++) {
           await api.uploadPaper(files[i]);
         }
-        // Initial fetch
         await fetchPapers();
-        // Secondary fetch to ensure all records (especially with fast creation) are synced
         setTimeout(() => fetchPapers(), 1500);
       } catch (error) {
         console.error('Upload failed:', error);
@@ -66,6 +66,7 @@ const LeftSidebar = () => {
   const handleCompare = async () => {
     if (selectedMultiPaperIds.length < 2) return alert("Select at least 2 papers.");
     setIsProcessing(true);
+    setActiveIntelligenceTab('intelligence');
     try {
       const res = await api.crossPaperAnalysis(selectedMultiPaperIds);
       setCrossPaperAnalysis(res.analysis);
@@ -78,6 +79,7 @@ const LeftSidebar = () => {
 
   const handleGeneratePodcast = async () => {
     if (selectedMultiPaperIds.length === 0) return alert("Select papers for podcast.");
+    setActiveIntelligenceTab('podcast');
     setPodcastData({ status: 'processing', url: null, script: null });
     try {
       const res = await api.generatePodcast(selectedMultiPaperIds);
@@ -89,30 +91,45 @@ const LeftSidebar = () => {
   };
 
   const handleDiscoveryAction = async (tool: string) => {
-    if (selectedMultiPaperIds.length < 1 && tool !== 'novelty') return alert("Select papers.");
+    // Determine effective target IDs: prefer multi-selection, fallback to active reader
+    let targetIds = selectedMultiPaperIds;
+    if (targetIds.length === 0 && activeReaderId) {
+      targetIds = [activeReaderId];
+    }
+
+    if (targetIds.length < 1 && tool !== 'novelty') return alert("Select a paper in the library or open one to begin.");
+    
+    if (tool === 'novelty') {
+      setActiveIntelligenceTab('discovery');
+      setDiscoveryState({ discoveryNovelty: null });
+      return;
+    }
+
+    setActiveIntelligenceTab('discovery');
     setDiscoveryState({ isDiscoveryLoading: true });
     try {
       let res;
       switch(tool) {
         case 'gaps':
-          res = await api.detectResearchGaps(selectedMultiPaperIds);
+          res = await api.detectResearchGaps(targetIds);
           setDiscoveryState({ discoveryGaps: res.gaps });
           break;
         case 'trends':
-          res = await api.analyzeTrends(selectedMultiPaperIds);
+          res = await api.analyzeTrends(targetIds);
           setDiscoveryState({ discoveryTrends: res });
           break;
         case 'ideas':
           const risk = window.prompt("Risk Level? (safe, moderate, moonshot)", "moderate") || "moderate";
-          res = await api.generateIdeas(selectedMultiPaperIds, risk);
+          res = await api.generateIdeas(targetIds, risk);
           setDiscoveryState({ discoveryIdeas: res.ideas });
           break;
         case 'methods':
-          res = await api.compareMethods(selectedMultiPaperIds);
+          res = await api.compareMethods(targetIds);
           setDiscoveryState({ discoveryMethods: res.comparison });
           break;
         case 'flaws':
-          res = await api.detectFlaws(selectedMultiPaperIds);
+          setActiveIntelligenceTab('critique');
+          res = await api.detectFlaws(targetIds);
           setDiscoveryState({ discoveryFlaws: res.flaws });
           break;
       }
@@ -121,6 +138,15 @@ const LeftSidebar = () => {
     } finally {
       setDiscoveryState({ isDiscoveryLoading: false });
     }
+  };
+
+  const onPaperContextMenu = (e: React.MouseEvent, paperId: number) => {
+    e.preventDefault();
+    setMenu({
+      id: String(paperId),
+      top: e.clientY,
+      left: e.clientX
+    });
   };
 
   const handleClearWorkspace = async () => {
@@ -135,7 +161,7 @@ const LeftSidebar = () => {
   };
 
   return (
-    <div className="h-full w-full flex flex-col bg-transparent overflow-hidden select-none">
+    <div className="h-full w-full flex flex-col bg-transparent overflow-hidden select-none" onClick={() => setMenu(null)}>
       {/* Library Header */}
       <div className="px-4 py-3 flex items-center justify-between group">
         <div className="flex items-center gap-2">
@@ -196,7 +222,7 @@ const LeftSidebar = () => {
           <div className="grid grid-cols-2 gap-1">
             <ToolButton icon={<Compass size={12} />} label="Gap Finder" onClick={() => handleDiscoveryAction('gaps')} />
             <ToolButton icon={<TrendingUp size={12} />} label="Trends" onClick={() => handleDiscoveryAction('trends')} />
-            <ToolButton icon={<Fingerprint size={12} />} label="Novelty" onClick={() => setDiscoveryState({ discoveryNovelty: null })} />
+            <ToolButton icon={<Fingerprint size={12} />} label="Novelty" onClick={() => handleDiscoveryAction('novelty')} />
             <ToolButton icon={<GitCompare size={12} />} label="Compare" onClick={handleCompare} />
           </div>
         </div>
@@ -211,7 +237,11 @@ const LeftSidebar = () => {
               <button onClick={() => toggleMultiPaperSelection(paper.id)} className={`p-1 rounded hover:bg-accent transition-colors ${isSelected ? 'text-primary' : 'text-muted-foreground/30'}`}>
                 {isSelected ? <CheckSquare size={12} /> : <Square size={12} />}
               </button>
-              <button onClick={() => setSelectedPaperId(paper.id)} className={`flex-1 flex items-center gap-2 px-2 py-1 rounded transition-all group ${selectedPaperId === paper.id ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent/40 hover:text-foreground/80'}`}>
+              <button 
+                onClick={() => setActiveReaderId(paper.id)}
+                onContextMenu={(e) => onPaperContextMenu(e, paper.id)}
+                className={`flex-1 flex items-center gap-2 px-2 py-1 rounded transition-all group ${selectedPaperId === paper.id ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent/40 hover:text-foreground/80'}`}
+              >
                 <FileText size={14} className={selectedPaperId === paper.id ? 'text-foreground' : 'text-muted-foreground group-hover:text-foreground/60'} />
                 <span className="flex-1 text-[11px] font-normal truncate text-left">{paper.title}</span>
               </button>
@@ -234,15 +264,17 @@ const LeftSidebar = () => {
         )}
       </div>
 
-      {/* Technical Modes */}
+      {/* Technical Modes Selector */}
       <div className="mt-auto border-t border-border/50 bg-card/10 p-2 space-y-1">
-        <SidebarItem icon={<GraduationCap size={14} />} label="Student" active={role === 'student'} onClick={() => setRole('student')} />
-        <SidebarItem icon={<Microscope size={14} />} label="Researcher" active={role === 'researcher'} onClick={() => setRole('researcher')} />
-        <SidebarItem icon={<ShieldCheck size={14} />} label="Reviewer" active={role === 'reviewer'} onClick={() => setRole('reviewer')} />
+        <SidebarItem icon={<GraduationCap size={14} />} label="Student" active={role === 'student'} onClick={() => useStore.getState().setRole('student')} />
+        <SidebarItem icon={<Microscope size={14} />} label="Researcher" active={role === 'researcher'} onClick={() => useStore.getState().setRole('researcher')} />
+        <SidebarItem icon={<ShieldCheck size={14} />} label="Reviewer" active={role === 'reviewer'} onClick={() => useStore.getState().setRole('reviewer')} />
         <div className="pt-1 border-t border-border/50">
           <SidebarItem icon={<Trash2 size={14} />} label="Clear Env" onClick={handleClearWorkspace} danger />
         </div>
       </div>
+
+      {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
     </div>
   );
 };

@@ -1,65 +1,79 @@
 import { useCallback } from 'react';
 import { useStore } from '../store/useStore';
 import { api } from '../api/client';
-import { Trash2, ExternalLink, Info } from 'lucide-react';
+import { Trash2, Maximize2, Layers, Info } from 'lucide-react';
 
 interface ContextMenuProps {
-  id: string;
+  id: string; // Can be paper_1 or 1
   top: number;
   left: number;
   onClose: () => void;
 }
 
 const ContextMenu = ({ id, top, left, onClose }: ContextMenuProps) => {
-  const { fetchPapers, setSelectedPaperId, setActiveReaderId } = useStore();
+  const { fetchPapers, setSelectedPaperId, addFloatingReader, setMaximizedReaderId } = useStore();
+  const numericId = Number(id.replace('paper_', ''));
 
   const handleDetails = useCallback(() => {
-    setSelectedPaperId(Number(id));
+    setSelectedPaperId(numericId);
     onClose();
-  }, [id, setSelectedPaperId, onClose]);
+  }, [numericId, setSelectedPaperId, onClose]);
 
-  const handleOpenReader = useCallback(() => {
-    setActiveReaderId(Number(id));
+  const handleOpenPopup = useCallback(() => {
+    addFloatingReader(numericId);
     onClose();
-  }, [id, setActiveReaderId, onClose]);
+  }, [numericId, addFloatingReader, onClose]);
+
+  const handleOpenFullscreen = useCallback(() => {
+    setMaximizedReaderId(numericId);
+    onClose();
+  }, [numericId, setMaximizedReaderId, onClose]);
 
   const handleDelete = useCallback(async () => {
-    try {
-      await api.deletePaper(Number(id));
-      await fetchPapers();
-      onClose();
-    } catch (error) {
-      console.error('Failed to delete paper:', error);
+    if (window.confirm("Delete this paper?")) {
+      try {
+        await api.deletePaper(numericId);
+        await fetchPapers();
+        onClose();
+      } catch (error) {
+        console.error('Failed to delete paper:', error);
+      }
     }
-  }, [id, fetchPapers, onClose]);
+  }, [numericId, fetchPapers, onClose]);
 
   return (
     <div
-      className="absolute z-50 bg-slate-800 border border-white/10 rounded-lg shadow-xl overflow-hidden py-1 min-w-[160px]"
+      className="fixed z-[300] bg-card border border-border rounded shadow-2xl overflow-hidden py-1 min-w-[180px] font-sans animate-in fade-in zoom-in-95"
       style={{ top, left }}
       onClick={(e) => e.stopPropagation()}
     >
-      <button
-        onClick={handleDetails}
-        className="w-full flex items-center gap-2 px-4 py-2 text-xs text-gray-200 hover:bg-blue-600/20 transition-colors"
-      >
-        <Info size={14} /> View Details
-      </button>
-      <button
-        onClick={handleOpenReader}
-        className="w-full flex items-center gap-2 px-4 py-2 text-xs text-gray-200 hover:bg-blue-600/20 transition-colors"
-      >
-        <ExternalLink size={14} /> Open Reader
-      </button>
-      <div className="h-px bg-white/10 my-1" />
+      <div className="px-3 py-1.5 border-b border-border/50">
+        <span className="text-[9px] mono font-bold text-muted-foreground uppercase tracking-widest">Document Options</span>
+      </div>
+      
+      <MenuButton onClick={handleDetails} icon={<Info size={14} />} label="View Metadata" />
+      <MenuButton onClick={handleOpenPopup} icon={<Layers size={14} />} label="Open as Popup" />
+      <MenuButton onClick={handleOpenFullscreen} icon={<Maximize2 size={14} />} label="Open Fullscreen" />
+      
+      <div className="h-px bg-border my-1" />
+      
       <button
         onClick={handleDelete}
-        className="w-full flex items-center gap-2 px-4 py-2 text-xs text-red-400 hover:bg-red-500/20 transition-colors"
+        className="w-full flex items-center gap-2.5 px-4 py-2 text-[11px] font-medium text-red-400 hover:bg-red-500/10 transition-colors text-left"
       >
         <Trash2 size={14} /> Delete Paper
       </button>
     </div>
   );
 };
+
+const MenuButton = ({ onClick, icon, label }: { onClick: () => void; icon: React.ReactNode; label: string }) => (
+  <button
+    onClick={onClick}
+    className="w-full flex items-center gap-2.5 px-4 py-2 text-[11px] font-medium text-foreground/80 hover:bg-accent hover:text-foreground transition-colors text-left"
+  >
+    {icon} {label}
+  </button>
+);
 
 export default ContextMenu;

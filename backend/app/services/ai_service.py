@@ -1,5 +1,7 @@
 import os
-from typing import List, Dict, Any
+import json
+import re
+from typing import List, Dict, Any, Optional
 import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
@@ -141,7 +143,6 @@ class AIService:
         
         try:
             response = await self.llm.generate_content_async(prompt)
-            import json
             content = response.text
             if "```json" in content:
                 content = content.split("```json")[1].split("```")[0].strip()
@@ -189,7 +190,6 @@ class AIService:
         
         try:
             response = await self.llm.generate_content_async(prompt)
-            import json
             content = response.text
             if "```json" in content:
                 content = content.split("```json")[1].split("```")[0].strip()
@@ -210,7 +210,6 @@ class AIService:
         
         try:
             response = await self.llm.generate_content_async(prompt)
-            import json
             content = response.text
             if "```json" in content:
                 content = content.split("```json")[1].split("```")[0].strip()
@@ -245,7 +244,6 @@ class AIService:
         prompt = f"On a scale of 0 to 100, how novel/unique is the research presented in this text? Return ONLY the number.\n\nText:\n{text[:5000]}"
         try:
             response = await self.llm.generate_content_async(prompt)
-            import re
             match = re.search(r'\d+', response.text)
             return int(match.group()) if match else 50
         except:
@@ -296,7 +294,6 @@ class AIService:
         
         try:
             response = await self.llm.generate_content_async(prompt)
-            import json
             content = response.text
             if "```json" in content:
                 content = content.split("```json")[1].split("```")[0].strip()
@@ -347,7 +344,6 @@ class AIService:
         
         try:
             response = await self.llm.generate_content_async(prompt)
-            import json
             content = response.text
             if "```json" in content:
                 content = content.split("```json")[1].split("```")[0].strip()
@@ -378,7 +374,6 @@ class AIService:
         
         try:
             response = await self.llm.generate_content_async(prompt)
-            import json
             content = response.text
             if "```json" in content:
                 content = content.split("```json")[1].split("```")[0].strip()
@@ -411,9 +406,7 @@ class AIService:
         """
         
         try:
-            # Adjust temperature for moonshots? LLM parameter not directly in this call but we can instruct via prompt.
             response = await self.llm.generate_content_async(prompt)
-            import json
             content = response.text
             if "```json" in content:
                 content = content.split("```json")[1].split("```")[0].strip()
@@ -471,7 +464,7 @@ class AIService:
         except Exception as e:
             return f"Flaw Detection Error: {str(e)}"
 
-    # --- New Reviewer Mode Methods ---
+    # --- Reviewer Mode Methods ---
 
     async def generate_reviewer_scores(self, papers_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         if not self.llm: return {}
@@ -490,7 +483,6 @@ class AIService:
         """
         try:
             response = await self.llm.generate_content_async(prompt)
-            import json
             content = response.text
             if "```json" in content:
                 content = content.split("```json")[1].split("```")[0].strip()
@@ -512,7 +504,6 @@ class AIService:
         """
         try:
             response = await self.llm.generate_content_async(prompt)
-            import json
             content = response.text
             if "```json" in content:
                 content = content.split("```json")[1].split("```")[0].strip()

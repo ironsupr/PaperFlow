@@ -102,6 +102,21 @@ interface AppState {
   reviewerReport: string | null;
   isReviewerLoading: boolean;
 
+  // Multi-Modal Reading State
+  floatingReaderIds: number[];
+  maximizedReaderId: number | null;
+  addFloatingReader: (id: number) => void;
+  removeFloatingReader: (id: number) => void;
+  setMaximizedReaderId: (id: number | null) => void;
+
+  // UI Coordination State
+  activeIntelligenceTab: 'intelligence' | 'citations' | 'discovery' | 'podcast' | 'critique';
+  setActiveIntelligenceTab: (tab: 'intelligence' | 'citations' | 'discovery' | 'podcast' | 'critique') => void;
+  leftSidebarVisible: boolean;
+  setLeftSidebarVisible: (visible: boolean) => void;
+  rightSidebarVisible: boolean;
+  setRightSidebarVisible: (visible: boolean) => void;
+
   setDiscoveryState: (data: Partial<AppState>) => void;
   setReviewerState: (data: Partial<AppState>) => void;
   
@@ -145,7 +160,7 @@ export const useStore = create<AppState>((set, get) => ({
   papers: [],
   setPapers: (papers) => set({ papers }),
   activeReaderId: null,
-  setActiveReaderId: (id) => set({ activeReaderId: id }),
+  setActiveReaderId: (id) => set({ activeReaderId: id, rightSidebarVisible: id ? true : get().rightSidebarVisible }),
 
   crossPaperAnalysis: null,
   setCrossPaperAnalysis: (analysis) => set({ crossPaperAnalysis: analysis }),
@@ -174,6 +189,27 @@ export const useStore = create<AppState>((set, get) => ({
   reviewerBias: null,
   reviewerReport: null,
   isReviewerLoading: false,
+
+  // UI State
+  activeIntelligenceTab: 'intelligence',
+  setActiveIntelligenceTab: (tab) => set({ activeIntelligenceTab: tab }),
+  leftSidebarVisible: true,
+  setLeftSidebarVisible: (visible) => set({ leftSidebarVisible: visible }),
+  rightSidebarVisible: true,
+  setRightSidebarVisible: (visible) => set({ rightSidebarVisible: visible }),
+
+  floatingReaderIds: [],
+  maximizedReaderId: null,
+  addFloatingReader: (id) => {
+    const current = get().floatingReaderIds;
+    if (!current.includes(id)) {
+      set({ floatingReaderIds: [...current, id] });
+    }
+  },
+  removeFloatingReader: (id) => {
+    set({ floatingReaderIds: get().floatingReaderIds.filter(fid => fid !== id) });
+  },
+  setMaximizedReaderId: (id) => set({ maximizedReaderId: id }),
   
   setDiscoveryState: (data) => set((state) => ({ ...state, ...data })),
   setReviewerState: (data) => set((state) => ({ ...state, ...data })),
@@ -196,7 +232,12 @@ export const useStore = create<AppState>((set, get) => ({
       reviewerScores: null,
       reviewerClaims: null,
       reviewerBias: null,
-      reviewerReport: null
+      reviewerReport: null,
+      activeIntelligenceTab: 'intelligence',
+      floatingReaderIds: [],
+      maximizedReaderId: null,
+      leftSidebarVisible: true,
+      rightSidebarVisible: true
     });
   },
 
@@ -266,7 +307,7 @@ export const useStore = create<AppState>((set, get) => ({
     const updatedNodes = nodes.map((node) => {
       if (node.type === 'paper') {
         const pId = node.id.replace('paper_', '');
-        const p = papers.find(pp => String(pp.id) === pId) || node.data;
+        const p = papers.find(pp => String(pp.id) === pId) || (node.data as any);
         
         const calculatePosition = (): { x: number; y: number } => {
           if (mode === 'timeline' && p.year) {

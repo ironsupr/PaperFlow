@@ -2,6 +2,7 @@ import os
 import shutil
 import re
 import logging
+import httpx
 from typing import List, Dict, Any
 from fastapi import UploadFile, BackgroundTasks
 import pdfplumber
@@ -171,12 +172,11 @@ class PaperService:
     def normalize_title(self, title: str) -> str:
         return re.sub(r'[^\w\s]', '', title).lower().strip()
 
-    async def fetch_metadata_from_semantic_scholar(self, db: Session, paper_id: int):
+    async def fetch_metadata_from_semantic_scholar(self, db: Session, paper_id: int) -> bool:
         """Fetch metadata from Semantic Scholar API (faster fallback)."""
         paper = db.query(Paper).filter(Paper.id == paper_id).first()
-        if not paper: return
+        if not paper: return False
         try:
-            import httpx
             async with httpx.AsyncClient() as client:
                 query = paper.title.replace(' ', '+')
                 response = await client.get(
