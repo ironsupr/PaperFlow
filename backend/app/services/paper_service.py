@@ -2,7 +2,7 @@ import os
 import shutil
 import re
 import logging
-from typing import List, Dict
+from typing import List, Dict, Any
 from fastapi import UploadFile, BackgroundTasks
 import pdfplumber
 from scholarly import scholarly
@@ -38,6 +38,30 @@ class PaperService:
             except Exception as e2:
                 logger.error(f"Fallback PyPDF2 also failed for {file_path}: {e2}")
         return text
+
+    def extract_sections(self, text: str) -> Dict[str, str]:
+        # Heuristic section extraction based on common academic headers
+        section_headers = [
+            "Abstract", "Introduction", "Methods", "Methodology", 
+            "Results", "Discussion", "Conclusion", "References", "Bibliography"
+        ]
+        
+        found_sections = {}
+        # Simple split by regex finding headers at start of lines
+        pattern = r'\n\s*(' + '|'.join(section_headers) + r')\s*\n'
+        splits = re.split(pattern, text, flags=re.IGNORECASE)
+        
+        # First part is usually metadata/title
+        if splits and len(splits) > 0:
+            found_sections["Header"] = splits[0][:1000] # Cap length
+            
+        for i in range(1, len(splits), 2):
+            if i + 1 < len(splits):
+                header = splits[i].capitalize()
+                content = splits[i+1].strip()
+                found_sections[header] = content[:5000] # Cap length per section
+                
+        return found_sections
 
     def chunk_text(self, text: str, chunk_size: int = 1000) -> List[str]:
         return [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
@@ -101,14 +125,11 @@ class PaperService:
 
     def extract_citation_contexts(self, text: str, paper_titles: List[str]) -> Dict[str, List[str]]:
         contexts = {}
-        # Simple sentence tokenizer
         sentences = re.split(r'(?<=[.!?])\s+', text)
         for title in paper_titles:
             contexts[title] = []
-            # Normalize title for searching
             norm_title = self.normalize_title(title)
             if len(norm_title) < 10: continue
-            
             for sentence in sentences:
                 if norm_title in self.normalize_title(sentence):
                     contexts[title].append(sentence.strip())
@@ -119,9 +140,7 @@ class PaperService:
         try:
             paper = db.query(Paper).filter(Paper.id == paper_id).first()
             if not paper: return
-
             new_contexts = paper.citation_contexts or {}
-            
             for title in titles:
                 try:
                     search_title = re.sub(r'[^\w\s]', ' ', title).strip()
@@ -129,12 +148,10 @@ class PaperService:
                     search_query = scholarly.search_pubs(search_title)
                     pub = next(search_query)
                     pub_title = pub['bib']['title']
-                    
                     existing = db.query(Paper).filter(Paper.title == pub_title).first()
                     if not existing:
                         authors_data = pub['bib'].get('author', 'Unknown')
                         authors_str = ", ".join(authors_data) if isinstance(authors_data, list) else str(authors_data)
-                        
                         existing = Paper(
                             title=pub_title,
                             authors=authors_str,
@@ -146,19 +163,15 @@ class PaperService:
                         )
                         db.add(existing)
                         db.flush()
-                    
                     if existing not in paper.references:
                         paper.references.append(existing)
-                        # Save context if found
                         if title in contexts:
                             new_contexts[str(existing.id)] = contexts[title]
-                        
                         paper.citation_contexts = new_contexts
                         db.commit()
                 except Exception as e:
                     logger.warning(f"Failed to process citation '{title}': {e}")
-                    db.rollback() # Crucial: rollback to keep the session usable
-            
+                    db.rollback()
         finally:
             db.close()
 
@@ -171,29 +184,33 @@ class PaperService:
             shutil.copyfileobj(file.file, buffer)
 
         text = self.parse_pdf(file_path)
+        
+        # Use AI to refine section detection and extract a better abstract
+        sections = self.extract_sections(text)
+        
+        # Add to AI index
         chunks = self.chunk_text(text)
         ai_service.add_to_index(chunks)
 
         paper = Paper(
             title=file.filename.replace(".pdf", ""),
             authors="Unknown",
-            abstract=text[:500] + "...",
+            abstract=sections.get("Abstract", text[:500] + "..."),
             upload_url=file_path,
             user_id=user_id,
-            is_external=0
+            is_external=0,
+            sections=sections,
+            highlights=[]
         )
         
-        # Local citation detection and context extraction
         norm_text = self.normalize_title(text)
         existing_papers = db.query(Paper).filter(Paper.user_id == user_id).all()
         local_contexts = {}
-        
         for existing in existing_papers:
             norm_title = self.normalize_title(existing.title)
             if len(norm_title) > 10 and norm_title in norm_text:
                 if existing not in paper.references:
                     paper.references.append(existing)
-                    # Extract contexts for local paper
                     paper_contexts = self.extract_citation_contexts(text, [existing.title])
                     local_contexts[str(existing.id)] = paper_contexts.get(existing.title, [])
 
@@ -204,7 +221,6 @@ class PaperService:
         
         citation_titles = self.extract_citations_titles(text)
         if citation_titles:
-            # Extract potential contexts for online papers too
             online_contexts = self.extract_citation_contexts(text, citation_titles)
             background_tasks.add_task(self.fetch_and_link_online_citations_sync, paper.id, citation_titles, online_contexts)
 

@@ -3,6 +3,7 @@ import GraphView from './GraphView';
 import RightPanel from './RightPanel';
 import LeftSidebar from './LeftSidebar';
 import BottomHUD from './BottomHUD';
+import PaperReader from './PaperReader';
 import { useStore } from '../store/useStore';
 import { motion } from 'framer-motion';
 
@@ -51,6 +52,9 @@ const Workspace = () => {
       <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20 w-full max-w-2xl">
         <BottomHUD />
       </div>
+
+      {/* Full-Screen Paper Reader Overlay */}
+      <PaperReader />
     </div>
   );
 };

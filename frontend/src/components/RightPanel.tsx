@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { 
   Sparkles, BookOpen, Search, Shield, Zap, MessageSquare, Loader2, GitBranch, Plus, 
@@ -10,6 +10,18 @@ import { api } from '../api/client';
 const RightPanel = () => {
   const { role, selectedPaperId, papers, fetchPapers, setFocusedPaperId, focusedPaperId } = useStore();
   const [activeTab, setActiveTab] = useState<'intelligence' | 'citations'>('intelligence');
+  
+  // Intelligence State
+  const [summaryLevel, setSummaryLevel] = useState<'beginner' | 'intermediate' | 'technical'>('intermediate');
+  const [paperSummary, setSummary] = useState<string | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [roleInsight, setRoleInsight] = useState<string | null>(null);
+  const [insightLoading, setInsightLoading] = useState(false);
+  const [noveltyScore, setNoveltyScore] = useState<number | null>(null);
+  const [definitions, setDefinitions] = useState<Record<string, string>>({});
+  const [defsLoading, setDefsLoading] = useState(false);
+  
+  // UI State
   const [query, setQuery] = useState('');
   const [responses, setResponses] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -18,6 +30,64 @@ const RightPanel = () => {
   const selectedPaper = papers.find(p => p.id === selectedPaperId);
   const otherPapers = papers.filter(p => p.id !== selectedPaperId && !selectedPaper?.reference_ids?.includes(p.id));
   const isFocused = focusedPaperId === selectedPaperId;
+
+  // AI Data Fetching
+  const handleFetchSummary = async (level: any) => {
+    if (!selectedPaperId) return;
+    setSummaryLoading(true);
+    try {
+      const res = await api.summarizePaper(selectedPaperId, level);
+      setSummary(res.summary);
+      setSummaryLevel(level);
+    } catch (error) {
+      console.error('Failed to fetch summary:', error);
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
+
+  const handleFetchRoleInsight = async () => {
+    if (!selectedPaperId) return;
+    setInsightLoading(true);
+    try {
+      const res = await api.getRoleInsight(selectedPaperId, role);
+      setRoleInsight(res.insight);
+      if (role === 'researcher') {
+        const novelty = await api.getNoveltyScore(selectedPaperId);
+        setNoveltyScore(novelty.score);
+      }
+    } catch (error) {
+      console.error('Failed to fetch insight:', error);
+    } finally {
+      setInsightLoading(false);
+    }
+  };
+
+  const handleFetchDefinitions = async () => {
+    if (!selectedPaperId) return;
+    setDefsLoading(true);
+    try {
+      const res = await api.getDefinitions(selectedPaperId);
+      setDefinitions(res.definitions);
+    } catch (error) {
+      console.error('Failed to fetch definitions:', error);
+    } finally {
+      setDefsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedPaperId) {
+      handleFetchSummary(summaryLevel);
+      handleFetchRoleInsight();
+      handleFetchDefinitions();
+    } else {
+      setSummary(null);
+      setRoleInsight(null);
+      setNoveltyScore(null);
+      setDefinitions({});
+    }
+  }, [selectedPaperId, role]);
 
   const handleQuery = async () => {
     if (!query.trim()) return;
@@ -59,6 +129,15 @@ const RightPanel = () => {
           </div>
           <div className="flex gap-1.5">
             <button 
+              onClick={() => fetchPapers()}
+              className="p-1.5 bg-slate-800 rounded-lg text-slate-400 hover:text-blue-400 transition-all shadow-lg"
+              title="Refresh Network"
+            >
+              <motion.div whileTap={{ rotate: 180 }}>
+                <Plus size={14} className="rotate-45" />
+              </motion.div>
+            </button>
+            <button 
               onClick={() => setFocusedPaperId(isFocused ? null : selectedPaperId)}
               className={`p-1.5 rounded-lg transition-all duration-300 shadow-lg ${isFocused ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-blue-400'}`}
               title={isFocused ? "Clear Focus" : "Focus Graph"}
@@ -96,7 +175,6 @@ const RightPanel = () => {
                       {p.title}
                     </button>
                   ))}
-                  {otherPapers.length === 0 && <p className="text-xs text-slate-500 italic p-2 text-center">No papers to link</p>}
                 </div>
               </div>
             </motion.div>
@@ -130,25 +208,9 @@ const RightPanel = () => {
                       </p>
                     )}
                   </div>
-                  {isExternal && refPaper?.scholar_url && (
-                    <a
-                      href={refPaper.scholar_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-1.5 bg-slate-800 rounded-lg text-slate-500 hover:text-blue-400 transition-colors shadow-lg opacity-0 group-hover:opacity-100"
-                    >
-                      <ExternalLink size={10} />
-                    </a>
-                  )}
                 </div>
               );
             })}
-            {(!selectedPaper.reference_ids || selectedPaper.reference_ids.length === 0) && (
-              <div className="py-8 text-center bg-white/5 border border-dashed border-white/5 rounded-2xl">
-                <p className="text-xs text-slate-600 font-medium">No references found yet</p>
-                <p className="text-[10px] text-slate-700 mt-1">Citations appear as background search completes</p>
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -156,60 +218,46 @@ const RightPanel = () => {
   };
 
   const renderRoleSpecificContent = () => {
-    const contents = {
-      student: {
-        icon: <BookOpen size={16} />,
-        title: 'Concept Summary',
-        color: 'blue',
-        text: 'This paper introduces the fundamental principles of qubit coherence times and their impact on quantum computing scalability...',
-        action: 'Generate Audio Explanation'
-      },
-      researcher: {
-        icon: <Search size={16} />,
-        title: 'Gap Detection',
-        color: 'emerald',
-        text: 'Identified a research gap in error correction for superconducting circuits specifically in high-temperature environments...',
-        action: 'Expand Search'
-      },
-      reviewer: {
-        icon: <Shield size={16} />,
-        title: 'Flaw Detection',
-        color: 'red',
-        text: 'Critical logical gap in Theorem 3.2: The assumption of noise independence may not hold under these specific conditions.',
-        action: 'Generate Official Report'
-      }
-    };
-
-    const config = contents[role as keyof typeof contents];
+    const config = {
+      student: { icon: <BookOpen size={16} />, title: 'Deep Discovery', color: 'blue', action: 'Generate Study Guide' },
+      researcher: { icon: <Search size={16} />, title: 'Research Gap Analysis', color: 'emerald', action: 'Identify Next Steps' },
+      reviewer: { icon: <Shield size={16} />, title: 'Peer Review criticals', color: 'red', action: 'Download Formal Review' }
+    }[role as keyof typeof roleInsight] || { icon: <Sparkles size={16} />, title: 'AI Analysis', color: 'blue', action: 'Process' };
 
     return (
       <div className="space-y-4 pt-2">
         <div className={`p-4 bg-${config.color}-500/5 border border-${config.color}-500/20 rounded-2xl`}>
-          <div className="flex items-center gap-2 mb-3">
-            <div className={`p-1.5 bg-${config.color}-500/20 rounded-lg text-${config.color}-400`}>
-              {config.icon}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className={`p-1.5 bg-${config.color}-500/20 rounded-lg text-${config.color}-400`}>
+                {config.icon}
+              </div>
+              <h4 className="text-white font-bold text-sm tracking-tight">{config.title}</h4>
             </div>
-            <h4 className="text-white font-bold text-sm tracking-tight">{config.title}</h4>
+            {insightLoading && <Loader2 size={14} className="animate-spin text-slate-500" />}
           </div>
-          <p className="text-[11px] text-slate-300 leading-relaxed italic">
-            "{config.text}"
+          
+          <p className="text-[11px] text-slate-300 leading-relaxed italic min-h-[40px]">
+            {roleInsight ? `"${roleInsight}"` : "Consulting Gemini for role-specific insights..."}
           </p>
-          {role === 'researcher' && (
+
+          {role === 'researcher' && noveltyScore !== null && (
             <div className="mt-4">
               <div className="flex items-center justify-between mb-1.5 px-1">
                 <span className="text-[9px] text-orange-500 font-bold uppercase tracking-widest">Novelty Score</span>
-                <span className="text-[10px] text-white font-bold">75%</span>
+                <span className="text-[10px] text-white font-bold">{noveltyScore}%</span>
               </div>
               <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden shadow-inner">
                 <motion.div 
                   initial={{ width: 0 }}
-                  animate={{ width: '75%' }}
-                  transition={{ duration: 1, ease: 'easeOut' }}
+                  animate={{ width: `${noveltyScore}%` }}
+                  transition={{ duration: 1.5, ease: 'easeOut' }}
                   className="h-full bg-gradient-to-r from-orange-600 to-orange-400 shadow-[0_0_8px_rgba(249,115,22,0.4)]" 
                 />
               </div>
             </div>
           )}
+          
           <button className={`w-full mt-4 py-2 bg-${config.color}-600/80 hover:bg-${config.color}-600 rounded-xl text-[10px] font-bold text-white transition-all shadow-lg active:scale-[0.98]`}>
             {config.action}
           </button>
@@ -265,7 +313,6 @@ const RightPanel = () => {
       <div className="flex-1 overflow-y-auto p-5 custom-scrollbar space-y-6">
         {selectedPaper ? (
           <>
-            {/* Selected Paper Brief */}
             <div className="px-1">
               <h2 className="text-white font-bold text-lg leading-tight line-clamp-2">{selectedPaper.title}</h2>
               <div className="flex items-center gap-3 mt-2">
@@ -289,8 +336,64 @@ const RightPanel = () => {
                   transition={{ duration: 0.2 }}
                   className="space-y-6"
                 >
-                  {renderRoleSpecificContent()}
+                  <div className="space-y-4 pt-2">
+                    {/* Multi-level Summary */}
+                    <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-2xl shadow-inner">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <div className="p-1.5 bg-blue-600/20 rounded-lg text-blue-400">
+                            <BookOpen size={16} />
+                          </div>
+                          <h4 className="text-white font-bold text-sm tracking-tight">Understanding Engine</h4>
+                        </div>
+                        <div className="flex bg-slate-950/60 p-0.5 rounded-lg border border-white/5">
+                          {(['beginner', 'intermediate', 'technical'] as const).map(l => (
+                            <button
+                              key={l}
+                              onClick={() => handleFetchSummary(l)}
+                              className={`px-2 py-1 text-[8px] font-black uppercase tracking-tighter rounded-md transition-all ${summaryLevel === l ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+                            >
+                              {l}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="relative min-h-[60px]">
+                        {summaryLoading ? (
+                          <div className="absolute inset-0 flex items-center justify-center bg-slate-900/10 backdrop-blur-sm rounded-lg">
+                            <Loader2 size={16} className="text-blue-400 animate-spin" />
+                          </div>
+                        ) : (
+                          <p className="text-[11px] text-slate-300 leading-relaxed italic animate-in fade-in duration-500">
+                            "{paperSummary || 'Aggregating intelligence...'}"
+                          </p>
+                        )}
+                      </div>
+                    </div>
 
+                    {/* Role Specific Discovery */}
+                    {renderRoleSpecificContent()}
+
+                    {/* Glossary */}
+                    <div className="space-y-4 pt-2">
+                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest px-1 flex items-center gap-2">
+                        <Database size={10} /> Key Concepts Glossary
+                      </span>
+                      <div className="grid grid-cols-1 gap-2">
+                        {Object.entries(definitions).map(([term, def]) => (
+                          <div key={term} className="p-3 bg-white/5 border border-white/5 rounded-xl group hover:border-blue-500/30 transition-all cursor-help">
+                            <h5 className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1 group-hover:text-blue-300">{term}</h5>
+                            <p className="text-[11px] text-slate-400 leading-relaxed italic line-clamp-2 group-hover:line-clamp-none transition-all">
+                              {def}
+                            </p>
+                          </div>
+                        ))}
+                        {defsLoading && <div className="text-center py-4"><Loader2 size={16} className="animate-spin text-slate-700 mx-auto" /></div>}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Insight History */}
                   <div className="space-y-4 pt-2">
                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest px-1">Insight History</span>
                     {responses.map((res, i) => (
@@ -307,12 +410,6 @@ const RightPanel = () => {
                         </div>
                       </div>
                     ))}
-                    {responses.length === 0 && (
-                      <div className="py-10 text-center bg-white/5 rounded-2xl border border-dashed border-white/5">
-                        <MessageSquare size={20} className="text-slate-700 mx-auto mb-2" />
-                        <p className="text-[10px] text-slate-600 font-bold uppercase tracking-widest">No conversation yet</p>
-                      </div>
-                    )}
                   </div>
                 </motion.div>
               ) : (
@@ -336,7 +433,7 @@ const RightPanel = () => {
             </div>
             <h4 className="text-white font-bold text-base mb-2">No Paper Selected</h4>
             <p className="text-xs text-slate-500 leading-relaxed max-w-[200px]">
-              Select a paper from the graph to begin deep analysis and citation exploration.
+              Select a paper from the graph to begin deep analysis.
             </p>
           </div>
         )}

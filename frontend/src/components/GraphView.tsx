@@ -23,14 +23,13 @@ const GraphView = () => {
   const { graphData, setSelectedPaperId, focusedPaperId, setFocusedPaperId, papers } = useStore();
   const [menu, setMenu] = useState<{ id: string; top: number; left: number } | null>(null);
   const [edgeContext, setEdgeContext] = useState<string[] | null>(null);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
   // Sync local ReactFlow state with store data
   useEffect(() => {
-    if (!graphData.nodes.length) return;
-
     let filteredNodes = [...graphData.nodes];
     let filteredEdges = [...graphData.edges];
 
@@ -59,7 +58,12 @@ const GraphView = () => {
       style: { stroke: '#3b82f6', strokeWidth: 2, opacity: 0.6 },
       animated: true,
     })));
-  }, [graphData, focusedPaperId, setNodes, setEdges]);
+
+    // Once we have data or papers list is confirmed empty, hide initial loader
+    if (graphData.nodes.length > 0 || papers.length === 0) {
+      setIsInitialLoad(false);
+    }
+  }, [graphData, focusedPaperId, papers.length, setNodes, setEdges]);
 
   const onNodeClick = useCallback((_: any, node: any) => {
     setSelectedPaperId(Number(node.id));
@@ -94,7 +98,7 @@ const GraphView = () => {
 
   return (
     <div className="w-full h-full relative bg-[#0f172a]" onClick={onPaneClick}>
-      {nodes.length === 0 && (
+      {isInitialLoad && papers.length > 0 && (
         <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
           <div className="flex flex-col items-center gap-3">
             <Loader2 className="text-blue-500 animate-spin" size={32} />

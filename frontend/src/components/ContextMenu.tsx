@@ -11,12 +11,17 @@ interface ContextMenuProps {
 }
 
 const ContextMenu = ({ id, top, left, onClose }: ContextMenuProps) => {
-  const { fetchPapers, setSelectedPaperId } = useStore();
+  const { fetchPapers, setSelectedPaperId, setActiveReaderId } = useStore();
 
   const handleDetails = useCallback(() => {
     setSelectedPaperId(Number(id));
     onClose();
   }, [id, setSelectedPaperId, onClose]);
+
+  const handleOpenReader = useCallback(() => {
+    setActiveReaderId(Number(id));
+    onClose();
+  }, [id, setActiveReaderId, onClose]);
 
   const handleDelete = useCallback(async () => {
     try {
@@ -41,9 +46,10 @@ const ContextMenu = ({ id, top, left, onClose }: ContextMenuProps) => {
         <Info size={14} /> View Details
       </button>
       <button
+        onClick={handleOpenReader}
         className="w-full flex items-center gap-2 px-4 py-2 text-xs text-gray-200 hover:bg-blue-600/20 transition-colors"
       >
-        <ExternalLink size={14} /> Open Paper
+        <ExternalLink size={14} /> Open Reader
       </button>
       <div className="h-px bg-white/10 my-1" />
       <button

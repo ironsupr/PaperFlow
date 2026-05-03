@@ -22,6 +22,8 @@ interface AppState {
   calculateLayout: () => void;
   isProcessing: boolean;
   setIsProcessing: (is: boolean) => void;
+  activeReaderId: number | null;
+  setActiveReaderId: (id: number | null) => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -35,7 +37,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
   logout: () => {
     localStorage.removeItem('token');
-    set({ user: null, token: null, papers: [], graphData: { nodes: [], edges: [] } });
+    set({ user: null, token: null, papers: [], graphData: { nodes: [], edges: [] }, activeReaderId: null });
   },
   role: 'student',
   setRole: (role) => set({ role }),
@@ -44,18 +46,32 @@ export const useStore = create<AppState>((set, get) => ({
   focusedPaperId: null,
   setFocusedPaperId: (id) => {
     set({ focusedPaperId: id });
-    get().calculateLayout(); // Instantly update layout locally
+    get().calculateLayout(); 
   },
   graphData: { nodes: [], edges: [] },
   setGraphData: (data) => set({ graphData: data }),
   papers: [],
   setPapers: (papers) => set({ papers }),
+  activeReaderId: null,
+  setActiveReaderId: (id) => set({ activeReaderId: id }),
+
+  clearStore: () => {
+    set({ 
+      papers: [], 
+      graphData: { nodes: [], edges: [] }, 
+      selectedPaperId: null, 
+      focusedPaperId: null,
+      activeReaderId: null
+    });
+  },
 
   calculateLayout: () => {
     const { papers, focusedPaperId } = get();
-    if (!papers.length) return;
+    if (!papers.length) {
+      set({ graphData: { nodes: [], edges: [] } });
+      return;
+    }
 
-    // Calculate levels for nodes (layered layout)
     const levels: Record<string, number> = {};
     const adj: Record<string, string[]> = {};
     const inDegree: Record<string, number> = {};
@@ -69,10 +85,8 @@ export const useStore = create<AppState>((set, get) => ({
       });
     });
 
-    // BFS to determine levels
     const queue: string[] = papers.filter((p: any) => (inDegree[String(p.id)] || 0) === 0).map((p: any) => String(p.id));
     queue.forEach(id => levels[id] = 0);
-    
     let head = 0;
     while (head < queue.length) {
       const u = queue[head++];
@@ -90,6 +104,16 @@ export const useStore = create<AppState>((set, get) => ({
       nodesByLevel[level].push(id);
     });
 
+    let neighborsOfFocus: any[] = [];
+    if (focusedPaperId) {
+      const focusIdStr = String(focusedPaperId);
+      neighborsOfFocus = papers.filter(p => 
+        p.id !== focusedPaperId && 
+        (p.reference_ids?.includes(focusedPaperId) || 
+         papers.find(fp => fp.id === focusedPaperId)?.reference_ids?.includes(p.id))
+      );
+    }
+
     const nodes = papers.map((p: any) => {
       const id = String(p.id);
       const isExternal = p.is_external === 1;
@@ -97,29 +121,24 @@ export const useStore = create<AppState>((set, get) => ({
       
       if (focusedPaperId) {
         if (id === String(focusedPaperId)) {
-          position = { x: 500, y: 500 };
+          position = { x: 1000, y: 1000 };
         } else {
-          const neighbors = papers.filter((paper: any) => 
-            paper.id !== focusedPaperId && 
-            (paper.reference_ids?.includes(focusedPaperId) || p.reference_ids?.includes(paper.id))
-          );
-          const index = neighbors.findIndex((n: any) => String(n.id) === id);
-          if (index !== -1) {
-            const angle = (index / neighbors.length) * 2 * Math.PI;
-            const radius = 450;
+          const neighborIndex = neighborsOfFocus.findIndex(n => String(n.id) === id);
+          if (neighborIndex !== -1) {
+            const angle = (neighborIndex / neighborsOfFocus.length) * 2 * Math.PI;
+            const radius = 600;
             position = {
-              x: 500 + radius * Math.cos(angle),
-              y: 500 + radius * Math.sin(angle)
+              x: 1000 + radius * Math.cos(angle),
+              y: 1000 + radius * Math.sin(angle)
             };
           } else {
-            // Non-neighbors are hidden anyway in component but need a position
-            position = { x: 0, y: 0 };
+            position = { x: -5000, y: -5000 };
           }
         }
       } else {
         const level = levels[id] || 0;
         const indexInLevel = nodesByLevel[level]?.indexOf(id) || 0;
-        position = { x: indexInLevel * 350, y: level * 300 };
+        position = { x: indexInLevel * 400, y: level * 350 };
       }
       
       return {
@@ -162,13 +181,23 @@ export const useStore = create<AppState>((set, get) => ({
       const response = await fetch('http://localhost:8000/papers/', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (response.status === 401) {
-        get().logout();
+      
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          console.warn("Session expired or unauthorized. Logging out...");
+          get().logout();
+        }
         return;
       }
+
       const data = await response.json();
-      set({ papers: data });
-      get().calculateLayout(); // Calculate layout locally after fetching
+      if (Array.isArray(data)) {
+        set({ papers: data });
+        get().calculateLayout(); 
+      } else {
+        console.error("Received invalid papers data format:", data);
+        set({ papers: [] });
+      }
     } catch (error) {
       console.error('Failed to fetch papers:', error);
     }

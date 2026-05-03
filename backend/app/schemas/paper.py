@@ -19,6 +19,8 @@ class PaperInDBBase(PaperBase):
     user_id: int
     is_external: int = 0
     citation_contexts: Optional[dict] = None
+    sections: Optional[dict] = None
+    highlights: Optional[List[dict]] = None
 
     class Config:
         from_attributes = True

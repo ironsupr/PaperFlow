@@ -44,4 +44,28 @@ export const api = {
     const response = await client.delete('/papers/clear/all');
     return response.data;
   },
+  updateHighlights: async (id: number, highlights: any[]) => {
+    const response = await client.post(`/papers/${id}/highlights`, highlights);
+    return response.data;
+  },
+  summarizePaper: async (paperId: number, level: string = 'intermediate') => {
+    const response = await client.post('/ai/summarize', { paper_id: paperId, level });
+    return response.data;
+  },
+  explainText: async (selection: string, paperId?: number) => {
+    const response = await client.post('/ai/explain', { selection, paper_id: paperId });
+    return response.data;
+  },
+  getDefinitions: async (paperId: number) => {
+    const response = await client.get('/ai/definitions', { params: { paper_id: paperId } });
+    return response.data;
+  },
+  getRoleInsight: async (paperId: number, role: string) => {
+    const response = await client.post('/ai/insight', { paper_id: paperId, role });
+    return response.data;
+  },
+  getNoveltyScore: async (paperId: number) => {
+    const response = await client.get('/ai/novelty', { params: { paper_id: paperId } });
+    return response.data;
+  },
 };

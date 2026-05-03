@@ -24,6 +24,8 @@ class Paper(Base):
     metadata_json = Column(JSON, nullable=True)
     is_external = Column(Integer, default=0) # 0 for uploaded, 1 for fetched
     citation_contexts = Column(JSON, nullable=True) # { "ref_id": ["context1", "context2"] }
+    sections = Column(JSON, nullable=True) # { "Abstract": "...", "Introduction": "..." }
+    highlights = Column(JSON, nullable=True) # [ { "content": "...", "note": "...", "position": {...} } ]
 
     owner = relationship("User")
     

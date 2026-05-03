@@ -34,7 +34,7 @@ const LeftSidebar = () => {
     if (window.confirm("Are you sure you want to clear your entire workspace? This will delete all papers and citations permanently.")) {
       try {
         await api.clearWorkspace();
-        await fetchPapers();
+        useStore.getState().clearStore(); // Clear local state immediately
       } catch (error) {
         console.error('Failed to clear workspace:', error);
       }
