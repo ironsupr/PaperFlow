@@ -3,6 +3,7 @@ import * as ResizablePanels from 'react-resizable-panels';
 import GraphView from './GraphView';
 import RightPanel from './RightPanel';
 import LeftSidebar from './LeftSidebar';
+import GlobalExplorer from './GlobalExplorer';
 import PaperReader from './PaperReader';
 import FloatingReader from './FloatingReader';
 import { useStore } from '../store/useStore';
@@ -33,7 +34,9 @@ const Workspace = () => {
     leftSidebarVisible,
     setLeftSidebarVisible,
     rightSidebarVisible,
-    setRightSidebarVisible
+    setRightSidebarVisible,
+    activeSidebarView,
+    setActiveSidebarView
   } = useStore();
 
   useEffect(() => {
@@ -51,11 +54,30 @@ const Workspace = () => {
             </div>
             <ActivityIcon 
               icon={<Files size={20} />} 
-              active={leftSidebarVisible} 
+              active={activeSidebarView === 'library' && leftSidebarVisible} 
               title="Library & Explorer"
-              onClick={() => setLeftSidebarVisible(!leftSidebarVisible)}
+              onClick={() => {
+                if (activeSidebarView === 'library') {
+                  setLeftSidebarVisible(!leftSidebarVisible);
+                } else {
+                  setActiveSidebarView('library');
+                  setLeftSidebarVisible(true);
+                }
+              }}
             />
-            <ActivityIcon icon={<Search size={20} />} title="Global Search" />
+            <ActivityIcon 
+              icon={<Search size={20} />} 
+              active={activeSidebarView === 'explorer' && leftSidebarVisible}
+              title="Global Research Search" 
+              onClick={() => {
+                if (activeSidebarView === 'explorer') {
+                  setLeftSidebarVisible(!leftSidebarVisible);
+                } else {
+                  setActiveSidebarView('explorer');
+                  setLeftSidebarVisible(true);
+                }
+              }}
+            />
             <ActivityIcon icon={<Activity size={20} />} title="System Activity" />
             <ActivityIcon icon={<Database size={20} />} title="Data Sources" />
           </div>
@@ -81,19 +103,21 @@ const Workspace = () => {
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <ResizablePanels.PanelGroup direction="horizontal">
-            {/* Left Sidebar - Explorer */}
+            {/* Left Sidebar - Explorer / Library */}
             {leftSidebarVisible && (
               <>
                 <ResizablePanels.Panel defaultSize={20} minSize={15} className="bg-card/30 border-r border-border">
                   <div className="h-full flex flex-col">
                     <div className="h-9 px-4 flex items-center justify-between border-b border-border/50 bg-background/50">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Explorer</span>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                        {activeSidebarView === 'library' ? 'Explorer' : 'Global Search'}
+                      </span>
                       <button onClick={() => setLeftSidebarVisible(false)} className="text-muted-foreground hover:text-foreground">
                         <ChevronLeft size={14} />
                       </button>
                     </div>
                     <div className="flex-1 overflow-hidden">
-                      <LeftSidebar />
+                      {activeSidebarView === 'library' ? <LeftSidebar /> : <GlobalExplorer />}
                     </div>
                   </div>
                 </ResizablePanels.Panel>

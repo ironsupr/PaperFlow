@@ -35,7 +35,8 @@ const LeftSidebar = () => {
     setPodcastData,
     setDiscoveryState,
     setActiveIntelligenceTab,
-    setActiveReaderId
+    setActiveReaderId,
+    activeReaderId
   } = useStore();
   
   const [menu, setMenu] = useState<{ id: string; top: number; left: number } | null>(null);

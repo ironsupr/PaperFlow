@@ -40,6 +40,13 @@ class PaperCreate(PaperBase):
 class PaperUpdate(PaperBase):
     pass
 
+class PaperImport(BaseModel):
+    title: str
+    authors: Optional[str] = None
+    abstract: Optional[str] = None
+    year: Optional[int] = None
+    scholar_url: Optional[str] = None
+
 class PaperInDBBase(PaperBase):
     id: int
     upload_url: Optional[str] = None

@@ -112,10 +112,17 @@ interface AppState {
   // UI Coordination State
   activeIntelligenceTab: 'intelligence' | 'citations' | 'discovery' | 'podcast' | 'critique';
   setActiveIntelligenceTab: (tab: 'intelligence' | 'citations' | 'discovery' | 'podcast' | 'critique') => void;
+  activeSidebarView: 'library' | 'explorer';
+  setActiveSidebarView: (view: 'library' | 'explorer') => void;
   leftSidebarVisible: boolean;
   setLeftSidebarVisible: (visible: boolean) => void;
   rightSidebarVisible: boolean;
   setRightSidebarVisible: (visible: boolean) => void;
+
+  // Explorer State
+  explorerResults: any[];
+  isExplorerLoading: boolean;
+  setExplorerState: (data: Partial<AppState>) => void;
 
   setDiscoveryState: (data: Partial<AppState>) => void;
   setReviewerState: (data: Partial<AppState>) => void;
@@ -193,10 +200,17 @@ export const useStore = create<AppState>((set, get) => ({
   // UI State
   activeIntelligenceTab: 'intelligence',
   setActiveIntelligenceTab: (tab) => set({ activeIntelligenceTab: tab }),
+  activeSidebarView: 'library',
+  setActiveSidebarView: (view) => set({ activeSidebarView: view }),
   leftSidebarVisible: true,
   setLeftSidebarVisible: (visible) => set({ leftSidebarVisible: visible }),
   rightSidebarVisible: true,
   setRightSidebarVisible: (visible) => set({ rightSidebarVisible: visible }),
+
+  // Explorer State
+  explorerResults: [],
+  isExplorerLoading: false,
+  setExplorerState: (data) => set((state) => ({ ...state, ...data })),
 
   floatingReaderIds: [],
   maximizedReaderId: null,
@@ -237,7 +251,9 @@ export const useStore = create<AppState>((set, get) => ({
       floatingReaderIds: [],
       maximizedReaderId: null,
       leftSidebarVisible: true,
-      rightSidebarVisible: true
+      rightSidebarVisible: true,
+      activeSidebarView: 'library',
+      explorerResults: []
     });
   },
 

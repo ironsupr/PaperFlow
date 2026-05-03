@@ -132,4 +132,13 @@ export const api = {
     const response = await client.post('/ai/structured-review', { paper_ids: paperIds });
     return response.data;
   },
+  // Explorer Mode
+  exploreSearch: async (query: string) => {
+    const response = await client.get('/explore/search', { params: { query } });
+    return response.data;
+  },
+  importPaper: async (paperData: { title: string, authors?: string, abstract?: string, year?: number, scholar_url?: string }) => {
+    const response = await client.post('/explore/import', paperData);
+    return response.data;
+  },
 };
