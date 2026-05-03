@@ -5,7 +5,6 @@ import {
   Zap, 
   Loader2, 
   GitBranch, 
-  Plus, 
   User, 
   Database,
   MessageSquare,
@@ -16,9 +15,15 @@ import {
   Mic2,
   Play,
   Pause,
-  RotateCcw,
-  Volume2
-} from 'lucide-react';
+  Volume2,
+  Compass,
+  TrendingUp,
+  Lightbulb,
+  ShieldAlert,
+  FileSearch,
+  AlertTriangle
+  } from 'lucide-react';
+
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../api/client';
 
@@ -26,17 +31,25 @@ const RightPanel = () => {
   const { 
     role, 
     selectedPaperId, 
+    selectedMultiPaperIds,
     papers, 
-    fetchPapers, 
     setFocusedPaperId, 
     focusedPaperId,
     crossPaperAnalysis,
     podcastStatus,
     podcastAudioUrl,
-    podcastScript
+    podcastScript,
+    discoveryGaps,
+    discoveryNovelty,
+    discoveryTrends,
+    discoveryIdeas,
+    discoveryMethods,
+    discoveryFlaws,
+    isDiscoveryLoading,
+    setDiscoveryState
   } = useStore();
   
-  const [activeTab, setActiveTab] = useState<'intelligence' | 'citations' | 'comparative' | 'podcast'>('intelligence');
+  const [activeTab, setActiveTab] = useState<'intelligence' | 'citations' | 'discovery' | 'podcast' | 'critique'>('intelligence');
   
   // Intelligence State
   const [summaryLevel, setSummaryLevel] = useState<'beginner' | 'intermediate' | 'technical'>('intermediate');
@@ -46,19 +59,29 @@ const RightPanel = () => {
   const [insightLoading, setInsightLoading] = useState(false);
   const [definitions, setDefinitions] = useState<Record<string, string>>({});
   
+  // Novelty State
+  const [noveltyIdea, setNoveltyIdea] = useState('');
+  
   // UI State
   const [query, setQuery] = useState('');
   const [responses, setResponses] = useState<Array<{ query: string; answer: string; followUps: string[] }>>([]);
   const [loading, setLoading] = useState(false);
-  const [showAddRef, setShowAddRef] = useState(false);
 
   // Audio Ref
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
 
   const selectedPaper = papers.find(p => p.id === selectedPaperId);
-  const otherPapers = papers.filter(p => p.id !== selectedPaperId && !selectedPaper?.reference_ids?.includes(p.id));
   const isFocused = focusedPaperId === selectedPaperId;
+
+  // Sync tab with role
+  useEffect(() => {
+    if (role === 'student') {
+      if (!['intelligence', 'podcast'].includes(activeTab)) setActiveTab('intelligence');
+    } else if (role === 'reviewer') {
+      if (!['intelligence', 'critique', 'citations'].includes(activeTab)) setActiveTab('critique');
+    }
+  }, [role, activeTab]);
 
   const handleFetchSummary = async (level: 'beginner' | 'intermediate' | 'technical') => {
     if (!selectedPaperId) return;
@@ -98,8 +121,11 @@ const RightPanel = () => {
   };
 
   useEffect(() => {
-    if (crossPaperAnalysis) setActiveTab('comparative');
-  }, [crossPaperAnalysis]);
+    if (discoveryGaps || discoveryTrends || discoveryIdeas || discoveryMethods || discoveryNovelty) {
+      setActiveTab('discovery');
+    }
+    if (discoveryFlaws) setActiveTab('critique');
+  }, [discoveryGaps, discoveryTrends, discoveryIdeas, discoveryMethods, discoveryNovelty, discoveryFlaws]);
 
   useEffect(() => {
     if (podcastStatus !== 'idle') setActiveTab('podcast');
@@ -110,7 +136,10 @@ const RightPanel = () => {
     setSummary(null);
     setRoleInsight(null);
     setDefinitions({});
-    handleFetchSummary(summaryLevel);
+    
+    // Auto-select summary level based on role
+    const level = role === 'student' ? 'beginner' : role === 'reviewer' ? 'technical' : 'intermediate';
+    handleFetchSummary(level);
     handleFetchRoleInsight();
     handleFetchDefinitions();
   }, [selectedPaperId, role]);
@@ -120,7 +149,7 @@ const RightPanel = () => {
     if (!finalQuery.trim()) return;
     setLoading(true);
     try {
-      const res = await api.queryAI(finalQuery, selectedPaperId || undefined);
+      const res = await api.queryAI(finalQuery, selectedPaperId || undefined, selectedMultiPaperIds.length > 0 ? selectedMultiPaperIds : undefined);
       const parts = res.answer.split('FOLLOW_UP:');
       const answer = parts[0].trim();
       const followUps = parts.slice(1).map((f: string) => f.trim());
@@ -133,14 +162,16 @@ const RightPanel = () => {
     }
   };
 
-  const handleAddReference = async (refId: number) => {
-    if (!selectedPaperId) return;
+  const handleNoveltyCheck = async () => {
+    if (!noveltyIdea.trim()) return;
+    setDiscoveryState({ isDiscoveryLoading: true });
     try {
-      await api.addReference(selectedPaperId, refId);
-      await fetchPapers();
-      setShowAddRef(false);
+      const res = await api.noveltyCheck(noveltyIdea, selectedMultiPaperIds.length > 0 ? selectedMultiPaperIds : undefined);
+      setDiscoveryState({ discoveryNovelty: res });
     } catch (error) {
-      console.error('Failed to add reference:', error);
+      console.error('Novelty check failed:', error);
+    } finally {
+      setDiscoveryState({ isDiscoveryLoading: false });
     }
   };
 
@@ -163,21 +194,30 @@ const RightPanel = () => {
           </div>
           <div className="flex items-center gap-1 p-0.5 bg-background border border-border rounded overflow-x-auto no-scrollbar">
             <TabButton active={activeTab === 'intelligence'} onClick={() => setActiveTab('intelligence')} icon={<Terminal size={12} />} label="Stream" />
-            <TabButton active={activeTab === 'citations'} onClick={() => setActiveTab('citations')} icon={<GitBranch size={12} />} label="Graph" />
-            {(crossPaperAnalysis || activeTab === 'comparative') && (
-              <TabButton active={activeTab === 'comparative'} onClick={() => setActiveTab('comparative')} icon={<GitCompare size={12} />} label="Cross" />
-            )}
-            {(podcastStatus !== 'idle' || activeTab === 'podcast') && (
+            
+            {role === 'student' && (
               <TabButton active={activeTab === 'podcast'} onClick={() => setActiveTab('podcast')} icon={<Mic2 size={12} />} label="Audio" />
+            )}
+            
+            {role === 'researcher' && (
+              <>
+                <TabButton active={activeTab === 'discovery'} onClick={() => setActiveTab('discovery')} icon={<Compass size={12} />} label="Discovery" />
+                <TabButton active={activeTab === 'citations'} onClick={() => setActiveTab('citations')} icon={<GitBranch size={12} />} label="Graph" />
+              </>
+            )}
+            
+            {role === 'reviewer' && (
+              <>
+                <TabButton active={activeTab === 'critique'} onClick={() => setActiveTab('critique')} icon={<ShieldAlert size={12} />} label="Critique" />
+                <TabButton active={activeTab === 'citations'} onClick={() => setActiveTab('citations')} icon={<GitBranch size={12} />} label="Topology" />
+              </>
             )}
           </div>
         </div>
 
         {selectedPaper && activeTab === 'intelligence' && (
           <div className="space-y-1.5">
-            <h3 className="text-[12px] font-semibold text-foreground leading-snug line-clamp-2">
-              {selectedPaper.title}
-            </h3>
+            <h3 className="text-[12px] font-semibold text-foreground leading-snug line-clamp-2">{selectedPaper.title}</h3>
             <div className="flex items-center gap-2 text-[10px] text-muted-foreground mono">
               <User size={10} />
               <span className="truncate">{selectedPaper.authors || 'Unknown'}</span>
@@ -196,9 +236,18 @@ const RightPanel = () => {
                   <Section title="Neural Summary" icon={<Activity size={12} />}>
                     <div className="space-y-4">
                       <div className="flex gap-1 p-1 bg-background border border-border rounded w-fit">
-                        {(['beginner', 'intermediate', 'technical'] as const).map(l => (
-                          <button key={l} onClick={() => handleFetchSummary(l)} className={`px-2 py-0.5 text-[10px] mono rounded transition-all ${summaryLevel === l ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>{l}</button>
-                        ))}
+                        {(['beginner', 'intermediate', 'technical'] as const).map(l => {
+                          const isRecommended = (role === 'student' && l === 'beginner') || (role === 'reviewer' && l === 'technical');
+                          return (
+                            <button 
+                              key={l} 
+                              onClick={() => handleFetchSummary(l)} 
+                              className={`px-2 py-0.5 text-[10px] mono rounded transition-all flex items-center gap-1 ${summaryLevel === l ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                            >
+                              {l} {isRecommended && <div className="w-1 h-1 rounded-full bg-primary" />}
+                            </button>
+                          );
+                        })}
                       </div>
                       <div className="relative min-h-[40px] text-[11px] leading-relaxed text-muted-foreground border-l border-border pl-4 py-1 font-normal">
                         {summaryLoading && <div className="absolute inset-0 flex items-center justify-center bg-background/50"><Loader2 size={14} className="animate-spin" /></div>}
@@ -206,23 +255,32 @@ const RightPanel = () => {
                       </div>
                     </div>
                   </Section>
+                  
+                  {crossPaperAnalysis && role === 'researcher' && (
+                    <Section title="Cross-Paper Analysis" icon={<GitCompare size={12} />}>
+                      <div className="text-[11px] leading-relaxed text-foreground/80 bg-accent/10 p-4 rounded border border-border/30 whitespace-pre-wrap">{crossPaperAnalysis}</div>
+                    </Section>
+                  )}
+
                   <Section title={`${role.charAt(0).toUpperCase() + role.slice(1)} Context`} icon={<Binary size={12} />}>
-                    <div className="space-y-5">
-                      <div className="text-[11px] leading-relaxed text-foreground/90 bg-card/20 p-4 rounded border border-border/50">
-                        {insightLoading ? <div className="flex items-center gap-2 text-muted-foreground mono text-[10px]"><Loader2 size={12} className="animate-spin" /><span>PROCESSING_STREAM...</span></div> : roleInsight || "Perspective data not available."}
+                    <div className="text-[11px] leading-relaxed text-foreground/90 bg-card/20 p-4 rounded border border-border/50">
+                      {insightLoading ? <div className="flex items-center gap-2 text-muted-foreground mono text-[10px]"><Loader2 size={12} className="animate-spin" /><span>PROCESSING_STREAM...</span></div> : roleInsight || "Perspective data not available."}
+                    </div>
+                  </Section>
+
+                  {role === 'student' && (
+                    <Section title="Glossary" icon={<Terminal size={12} />}>
+                      <div className="grid gap-2">
+                        {Object.entries(definitions).map(([term, def]) => (
+                          <div key={term} className="p-3 bg-card/5 border border-border/50 rounded hover:border-border transition-colors group">
+                            <h5 className="text-[10px] mono font-semibold text-foreground mb-1.5">{term}</h5>
+                            <p className="text-[11px] text-muted-foreground leading-normal line-clamp-2 group-hover:line-clamp-none">{def}</p>
+                          </div>
+                        ))}
                       </div>
-                    </div>
-                  </Section>
-                  <Section title="Definitions" icon={<Terminal size={12} />}>
-                    <div className="grid gap-2">
-                      {Object.entries(definitions).map(([term, def]) => (
-                        <div key={term} className="p-3 bg-card/5 border border-border/50 rounded hover:border-border transition-colors group">
-                          <h5 className="text-[10px] mono font-semibold text-foreground mb-1.5">{term}</h5>
-                          <p className="text-[11px] text-muted-foreground leading-normal line-clamp-2 group-hover:line-clamp-none">{def}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </Section>
+                    </Section>
+                  )}
+
                   {responses.length > 0 && (
                     <Section title="Stream History" icon={<MessageSquare size={12} />}>
                       <div className="space-y-6">
@@ -247,53 +305,85 @@ const RightPanel = () => {
             </motion.div>
           )}
 
-          {activeTab === 'comparative' && (
-            <motion.div key="comparative" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 space-y-6">
-              <Section title="Cross-Paper Analysis" icon={<GitCompare size={14} />}>
-                <div className="text-[11px] leading-relaxed text-muted-foreground whitespace-pre-wrap bg-card/20 p-5 rounded border border-border/50">
-                  {crossPaperAnalysis || "Select multiple papers and click 'Compare' to see patterns across your library."}
+          {activeTab === 'discovery' && role === 'researcher' && (
+            <motion.div key="discovery" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 space-y-8">
+              {isDiscoveryLoading && <div className="flex flex-col items-center gap-3 py-12"><Loader2 className="animate-spin text-primary" size={24} /><p className="text-[10px] mono text-muted-foreground">SCANNING_CORPUS...</p></div>}
+              <Section title="Novelty Checker" icon={<Zap size={12} />}>
+                <div className="space-y-4">
+                  <textarea placeholder="Paste an idea to check against corpus..." className="w-full h-24 bg-background border border-border rounded p-3 text-[11px] mono focus:outline-none focus:border-primary/50 transition-all" value={noveltyIdea} onChange={e => setNoveltyIdea(e.target.value)} />
+                  <button onClick={handleNoveltyCheck} disabled={!noveltyIdea.trim() || isDiscoveryLoading} className="w-full py-2 bg-foreground text-background text-[10px] font-bold uppercase rounded hover:opacity-90 disabled:opacity-30 transition-all">Assess Novelty</button>
+                  {discoveryNovelty && (
+                    <div className="p-4 bg-card border border-border rounded-lg space-y-4">
+                      <div className="flex items-center justify-between"><span className="text-[10px] mono text-muted-foreground">NOVELTY_SCORE</span><span className={`text-lg font-black ${discoveryNovelty.score > 70 ? 'text-green-400' : 'text-orange-400'}`}>{discoveryNovelty.score}%</span></div>
+                      <p className="text-[11px] text-foreground/80 leading-relaxed italic border-l border-border pl-3">{discoveryNovelty.critique}</p>
+                    </div>
+                  )}
                 </div>
               </Section>
+              {discoveryGaps && <Section title="Research Gaps" icon={<Compass size={12} />}><div className="text-[11px] leading-relaxed text-muted-foreground bg-card/20 p-5 rounded border border-border/50 whitespace-pre-wrap">{discoveryGaps}</div></Section>}
+              {discoveryTrends && (
+                <Section title="Trend Analysis" icon={<TrendingUp size={12} />}>
+                  <div className="space-y-6">
+                    <div className="grid gap-2">
+                      <p className="text-[9px] font-bold text-green-400 uppercase tracking-widest">Trending</p>
+                      {discoveryTrends.trending.map((t, i) => <div key={i} className="p-3 bg-green-400/5 border border-green-400/20 rounded"><h5 className="text-[10px] font-bold text-green-400">{t.topic}</h5><p className="text-[10px] text-muted-foreground">{t.reason}</p></div>)}
+                    </div>
+                  </div>
+                </Section>
+              )}
+              {discoveryIdeas && (
+                <Section title="Generated Ideas" icon={<Lightbulb size={12} />}>
+                  <div className="space-y-4">
+                    {discoveryIdeas.map((idea, i) => <div key={i} className="p-4 bg-card border border-border rounded-lg space-y-2 group hover:border-primary/30 transition-all"><h5 className="text-[11px] font-bold text-foreground uppercase tracking-tight">{idea.title}</h5><p className="text-[10px] text-muted-foreground italic">"{idea.rationale}"</p></div>)}
+                  </div>
+                </Section>
+              )}
             </motion.div>
           )}
 
-          {activeTab === 'podcast' && (
+          {activeTab === 'critique' && role === 'reviewer' && (
+            <motion.div key="critique" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 space-y-8">
+              {isDiscoveryLoading && <div className="flex flex-col items-center gap-3 py-12"><Loader2 className="animate-spin text-primary" size={24} /><p className="text-[10px] mono text-muted-foreground">AUDITING_METHODS...</p></div>}
+              {discoveryFlaws && (
+                <Section title="Flaw Detection" icon={<AlertTriangle size={14} className="text-red-400" />}>
+                  <div className="text-[11px] leading-relaxed text-red-200/80 bg-red-500/5 p-5 rounded border border-red-500/20 whitespace-pre-wrap">
+                    {discoveryFlaws}
+                  </div>
+                </Section>
+              )}
+              {discoveryMethods && (
+                <Section title="Methodological Audit" icon={<FileSearch size={14} />}>
+                  <div className="text-[11px] leading-relaxed text-muted-foreground bg-card/20 p-5 rounded border border-border/50 whitespace-pre-wrap">
+                    {discoveryMethods}
+                  </div>
+                </Section>
+              )}
+              {!discoveryFlaws && !discoveryMethods && !isDiscoveryLoading && (
+                <EmptyState icon={<ShieldAlert size={24} />} message="Use sidebar tools to audit methodologies" />
+              )}
+            </motion.div>
+          )}
+
+          {activeTab === 'podcast' && role === 'student' && (
             <motion.div key="podcast" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 space-y-8">
               <Section title="Podcast Learning Mode" icon={<Mic2 size={14} />}>
                 <div className="bg-accent/10 border border-border rounded-xl p-6 flex flex-col items-center text-center space-y-6">
-                  <div className="w-16 h-16 bg-foreground rounded-full flex items-center justify-center text-background shadow-2xl">
-                    <Volume2 size={32} />
-                  </div>
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-semibold">Conversational Research</h4>
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest mono">Status: {podcastStatus}</p>
-                  </div>
-                  
+                  <div className="w-16 h-16 bg-foreground rounded-full flex items-center justify-center text-background shadow-2xl"><Volume2 size={32} /></div>
                   {podcastAudioUrl && (
                     <>
                       <audio ref={audioRef} src={`http://localhost:8000${podcastAudioUrl}`} onEnded={() => setIsPlaying(false)} />
                       <div className="flex items-center gap-4">
-                        <button onClick={() => { if(audioRef.current) audioRef.current.currentTime -= 10 }} className="p-2 text-muted-foreground hover:text-foreground"><RotateCcw size={18} /></button>
-                        <button onClick={togglePlayback} className="w-12 h-12 bg-foreground text-background rounded-full flex items-center justify-center hover:scale-105 transition-all">
-                          {isPlaying ? <Pause size={24} /> : <Play size={24} className="ml-1" />}
-                        </button>
-                        <button onClick={() => { if(audioRef.current) audioRef.current.currentTime += 10 }} className="p-2 text-muted-foreground hover:text-foreground rotate-180"><RotateCcw size={18} /></button>
+                        <button onClick={togglePlayback} className="w-12 h-12 bg-foreground text-background rounded-full flex items-center justify-center hover:scale-105 transition-all">{isPlaying ? <Pause size={24} /> : <Play size={24} className="ml-1" />}</button>
                       </div>
                     </>
                   )}
                   {podcastStatus === 'processing' && <Loader2 className="animate-spin text-muted-foreground" size={24} />}
                 </div>
               </Section>
-
               {podcastScript && (
                 <Section title="Live Script" icon={<Terminal size={12} />}>
                   <div className="space-y-4 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
-                    {podcastScript.map((line, i) => (
-                      <div key={i} className={`p-3 rounded border border-border/30 ${line.speaker === 'Alex' ? 'bg-card/30' : 'bg-accent/5'}`}>
-                        <span className="text-[9px] mono font-bold text-muted-foreground uppercase block mb-1">{line.speaker}</span>
-                        <p className="text-[11px] leading-relaxed text-foreground/90">{line.text}</p>
-                      </div>
-                    ))}
+                    {podcastScript.map((line, i) => <div key={i} className={`p-3 rounded border border-border/30 ${line.speaker === 'Alex' ? 'bg-card/30' : 'bg-accent/5'}`}><span className="text-[9px] mono font-bold text-muted-foreground uppercase block mb-1">{line.speaker}</span><p className="text-[11px] leading-relaxed text-foreground/90">{line.text}</p></div>)}
                   </div>
                 </Section>
               )}
@@ -304,37 +394,13 @@ const RightPanel = () => {
             <motion.div key="citations" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 space-y-8">
               {selectedPaper ? (
                 <div className="space-y-8">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-[10px] font-semibold text-muted-foreground mono">GRAPH_TOPOLOGY</h4>
-                    <div className="flex gap-1.5">
-                      <button onClick={() => setFocusedPaperId(isFocused ? null : selectedPaperId)} className={`p-1.5 rounded transition-all border ${isFocused ? 'bg-foreground text-background border-foreground' : 'bg-background text-muted-foreground border-border hover:text-foreground'}`} title={isFocused ? "Clear Focus" : "Focus on Graph"}><Activity size={12} /></button>
-                      <button onClick={() => setShowAddRef(!showAddRef)} className={`p-1.5 rounded transition-all border ${showAddRef ? 'bg-accent text-foreground border-border' : 'bg-background text-muted-foreground border-border hover:text-foreground'}`} title="Add Reference"><Plus size={12} /></button>
-                    </div>
-                  </div>
-                  {showAddRef && (
-                    <div className="p-3 bg-card/20 border border-border/50 rounded space-y-3">
-                      <p className="text-[9px] mono text-muted-foreground">CONNECT_DOCUMENT</p>
-                      <div className="max-h-40 overflow-y-auto custom-scrollbar space-y-1">
-                        {otherPapers.map(p => (
-                          <button key={p.id} onClick={() => handleAddReference(p.id)} className="w-full text-left p-2 hover:bg-accent rounded text-[11px] text-muted-foreground hover:text-foreground transition-colors truncate mono">{`./${p.title}`}</button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  <div className="flex items-center justify-between"><h4 className="text-[10px] font-semibold text-muted-foreground mono">GRAPH_TOPOLOGY</h4><div className="flex gap-1.5"><button onClick={() => setFocusedPaperId(isFocused ? null : selectedPaperId)} className={`p-1.5 rounded transition-all border ${isFocused ? 'bg-foreground text-background border-foreground' : 'bg-background text-muted-foreground border-border hover:text-foreground'}`} title={isFocused ? "Clear Focus" : "Focus on Graph"}><Activity size={12} /></button></div></div>
                   <div className="space-y-4">
                     <div className="flex items-center gap-2"><Database size={12} className="text-muted-foreground" /><span className="text-[10px] font-semibold text-muted-foreground mono">{`REFERENCES [${selectedPaper.reference_ids?.length || 0}]`}</span></div>
                     <div className="space-y-1.5">
                       {selectedPaper.reference_ids?.map((refId: number) => {
                         const refPaper = papers.find(p => p.id === refId);
-                        return (
-                          <div key={refId} className="group flex items-center gap-3 p-2.5 bg-card/5 border border-border/30 rounded hover:border-border/60 transition-colors">
-                            <div className="w-1 h-1 bg-foreground/40 rounded-full shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[11px] font-medium text-foreground/90 truncate">{refPaper?.title || `Paper #${refId}`}</p>
-                              <p className="text-[9px] text-muted-foreground truncate mono">{refPaper?.authors || 'UNKNOWN'}</p>
-                            </div>
-                          </div>
-                        );
+                        return <div key={refId} className="group flex items-center gap-3 p-2.5 bg-card/5 border border-border/30 rounded hover:border-border/60 transition-colors"><div className="w-1 h-1 bg-foreground/40 rounded-full shrink-0" /><div className="flex-1 min-w-0"><p className="text-[11px] font-medium text-foreground/90 truncate">{refPaper?.title || `Paper #${refId}`}</p></div></div>;
                       })}
                     </div>
                   </div>
@@ -348,22 +414,8 @@ const RightPanel = () => {
       {/* Input Area */}
       <div className="p-4 border-t border-border/50 bg-card/5">
         <div className="relative group">
-          <input
-            type="text"
-            placeholder={selectedPaper ? `Query research stream...` : `Select source...`}
-            className="w-full bg-background border border-border rounded py-2 pl-3 pr-10 text-[11px] mono text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30 transition-all"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleQuery()}
-            disabled={loading || !selectedPaperId}
-          />
-          <button 
-            onClick={() => handleQuery()}
-            disabled={loading || !selectedPaperId}
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 text-muted-foreground hover:text-foreground disabled:opacity-50 transition-colors"
-          >
-            {loading ? <Loader2 className="animate-spin" size={14} /> : <Zap size={14} />}
-          </button>
+          <input type="text" placeholder={selectedPaper ? `Query research stream...` : `Select source...`} className="w-full bg-background border border-border rounded py-2 pl-3 pr-10 text-[11px] mono text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/30 transition-all" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleQuery()} disabled={loading || !selectedPaperId} />
+          <button onClick={() => handleQuery()} disabled={loading || !selectedPaperId} className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 text-muted-foreground hover:text-foreground disabled:opacity-50 transition-colors">{loading ? <Loader2 className="animate-spin" size={14} /> : <Zap size={14} />}</button>
         </div>
       </div>
     </div>
@@ -371,35 +423,22 @@ const RightPanel = () => {
 };
 
 const TabButton = ({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) => (
-  <button
-    onClick={onClick}
-    className={`flex items-center gap-2 px-3 py-1 rounded text-[10px] mono transition-all whitespace-nowrap ${
-      active ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground'
-    }`}
-  >
-    {icon}
-    {label}
+  <button onClick={onClick} className={`flex items-center gap-2 px-3 py-1 rounded text-[10px] mono transition-all whitespace-nowrap ${active ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+    {icon}{label}
   </button>
 );
 
 const Section = ({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) => (
   <div className="space-y-4">
-    <div className="flex items-center gap-2 text-[10px] mono text-muted-foreground/60 uppercase tracking-wider">
-      {icon}
-      {title}
-    </div>
+    <div className="flex items-center gap-2 text-[10px] mono text-muted-foreground/60 uppercase tracking-wider">{icon}{title}</div>
     {children}
   </div>
 );
 
 const EmptyState = ({ icon, message }: { icon: React.ReactNode; message: string }) => (
   <div className="py-24 flex flex-col items-center justify-center text-center space-y-4 opacity-40">
-    <div className="p-4 bg-card/20 rounded-full text-muted-foreground">
-      {icon}
-    </div>
-    <p className="text-[10px] mono text-muted-foreground max-w-[160px]">
-      {message}
-    </p>
+    <div className="p-4 bg-card/20 rounded-full text-muted-foreground">{icon}</div>
+    <p className="text-[10px] mono text-muted-foreground max-w-[160px]">{message}</p>
   </div>
 );
 

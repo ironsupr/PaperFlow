@@ -41,22 +41,25 @@ const Workspace = () => {
             <ActivityIcon 
               icon={<Files size={20} />} 
               active={leftSidebarVisible} 
+              title="Library & Explorer"
               onClick={() => setLeftSidebarVisible(!leftSidebarVisible)}
             />
-            <ActivityIcon icon={<Search size={20} />} />
-            <ActivityIcon icon={<Activity size={20} />} />
-            <ActivityIcon icon={<Database size={20} />} />
+            <ActivityIcon icon={<Search size={20} />} title="Global Search" />
+            <ActivityIcon icon={<Activity size={20} />} title="System Activity" />
+            <ActivityIcon icon={<Database size={20} />} title="Data Sources" />
           </div>
           <div className="flex flex-col items-center gap-2 w-full">
             <ActivityIcon 
               icon={<MessageSquare size={20} />} 
               active={rightSidebarVisible}
+              title="Intelligence Assistant"
               onClick={() => setRightSidebarVisible(!rightSidebarVisible)}
             />
-            <ActivityIcon icon={<User size={20} />} />
-            <ActivityIcon icon={<Settings size={20} />} />
+            <ActivityIcon icon={<User size={20} />} title="User Profile" />
+            <ActivityIcon icon={<Settings size={20} />} title="Settings" />
             <button 
               onClick={() => logout()}
+              title="Sign Out"
               className="p-3 text-muted-foreground hover:text-destructive transition-colors"
             >
               <LogOut size={20} />
@@ -170,9 +173,10 @@ const Workspace = () => {
   );
 };
 
-const ActivityIcon = ({ icon, active, onClick }: { icon: React.ReactNode; active?: boolean; onClick?: () => void }) => (
+const ActivityIcon = ({ icon, active, onClick, title }: { icon: React.ReactNode; active?: boolean; onClick?: () => void; title?: string }) => (
   <button 
     onClick={onClick}
+    title={title}
     className={`w-full p-3 flex justify-center transition-all relative group`}
   >
     <div className={`transition-colors ${active ? 'text-foreground' : 'text-muted-foreground group-hover:text-foreground'}`}>

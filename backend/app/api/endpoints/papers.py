@@ -47,15 +47,27 @@ def get_graph_data(
     nodes = []
     edges = []
     
-    concept_nodes = {} # Use name as key to avoid duplicates in view
+    # Calculate influence (in-degree)
+    influence_counts = {}
+    for paper in papers:
+        for ref in paper.references:
+            ref_id = f"paper_{ref.id}"
+            influence_counts[ref_id] = influence_counts.get(ref_id, 0) + 1
+
+    concept_nodes = {}
     
     for paper in papers:
+        p_id = f"paper_{paper.id}"
         nodes.append({
-            "id": f"paper_{paper.id}",
+            "id": p_id,
             "type": "paper",
             "data": {
                 "label": paper.title,
                 "authors": paper.authors,
+                "year": paper.year,
+                "domain": paper.domain,
+                "topic": paper.topic,
+                "influence": influence_counts.get(p_id, 0),
                 "isExternal": paper.is_external == 1
             }
         })
@@ -91,6 +103,22 @@ def get_graph_data(
             })
             
     return {"nodes": nodes, "edges": edges}
+
+@router.delete("/clear/all", response_model=dict)
+def clear_workspace(
+    *,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """Delete all papers, notes, and references for the current user."""
+    # SQLAlchemy will handle cascade deletes for notes if configured in models, 
+    # but we'll be explicit here for the papers.
+    papers = db.query(PaperModel).filter(PaperModel.user_id == current_user.id).all()
+    for paper in papers:
+        db.delete(paper)
+    
+    db.commit()
+    return {"status": "success", "message": "Entire workspace cleared"}
 
 @router.get("/{id}", response_model=PaperSchema)
 def read_paper(

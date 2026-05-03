@@ -15,7 +15,7 @@ import { useStore } from '../store/useStore';
 import ContextMenu from './ContextMenu';
 import PaperNode from './PaperNode';
 import ConceptNode from './ConceptNode';
-import { MessageSquare, Loader2, RotateCcw, Network } from 'lucide-react';
+import { MessageSquare, Loader2, RotateCcw, Network, Calendar, LayoutGrid, Layers } from 'lucide-react';
 
 const nodeTypes = {
   paper: PaperNode,
@@ -23,10 +23,11 @@ const nodeTypes = {
 };
 
 const GraphView = () => {
-  const { graphData, setSelectedPaperId, focusedPaperId, setFocusedPaperId, papers, fetchGraphData } = useStore();
+  const { graphData, setSelectedPaperId, focusedPaperId, setFocusedPaperId, papers, fetchGraphData, calculateLayout } = useStore();
   const [menu, setMenu] = useState<{ id: string; top: number; left: number } | null>(null);
   const [edgeContext, setEdgeContext] = useState<string[] | null>(null);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+  const [layoutMode, setLayoutMode] = useState<'standard' | 'timeline' | 'clusters'>('standard');
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -71,6 +72,11 @@ const GraphView = () => {
 
     setInitialLoadComplete(true);
   }, [graphData, focusedPaperId, setNodes, setEdges]);
+
+  const handleLayoutChange = (mode: 'standard' | 'timeline' | 'clusters') => {
+    setLayoutMode(mode);
+    calculateLayout(mode);
+  };
 
   const onNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
     if (node.type === 'paper') {
@@ -150,6 +156,13 @@ const GraphView = () => {
         />
 
         <Panel position="top-right" className="flex flex-col gap-2 items-end">
+          {/* Discovery Layout Controls */}
+          <div className="flex bg-card border border-border rounded-md p-1 shadow-sm gap-1">
+            <LayoutButton active={layoutMode === 'standard'} onClick={() => handleLayoutChange('standard')} icon={<LayoutGrid size={12} />} label="Standard" />
+            <LayoutButton active={layoutMode === 'timeline'} onClick={() => handleLayoutChange('timeline')} icon={<Calendar size={12} />} label="Timeline" />
+            <LayoutButton active={layoutMode === 'clusters'} onClick={() => handleLayoutChange('clusters')} icon={<Layers size={12} />} label="Clusters" />
+          </div>
+
           <div className="flex gap-2">
             <button 
               onClick={(e) => {
@@ -159,7 +172,7 @@ const GraphView = () => {
               className="group flex items-center gap-2 bg-primary text-primary-foreground border border-primary px-3 py-1.5 rounded-md hover:opacity-90 transition-all text-[10px] font-bold uppercase tracking-wider shadow-sm"
             >
               <Network size={12} />
-              Semantic Graph
+              Semantic Map
             </button>
             <button 
               onClick={(e) => {
@@ -201,5 +214,16 @@ const GraphView = () => {
     </div>
   );
 };
+
+const LayoutButton = ({ active, onClick, icon, label }: any) => (
+  <button 
+    onClick={onClick}
+    className={`flex items-center gap-1.5 px-2 py-1 rounded transition-all text-[9px] font-bold uppercase tracking-tight
+      ${active ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'}`}
+  >
+    {icon}
+    <span>{label}</span>
+  </button>
+);
 
 export default GraphView;

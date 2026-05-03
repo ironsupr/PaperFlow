@@ -1,4 +1,4 @@
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Dict
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from app.api import deps
 from app.services.ai_service import ai_service
@@ -42,6 +42,25 @@ class CrossPaperRequest(BaseModel):
 class PodcastRequest(BaseModel):
     paper_ids: List[int]
     tone: str = "casual"
+
+# Researcher Mode Requests
+class ResearchGapRequest(BaseModel):
+    paper_ids: List[int]
+
+class NoveltyCheckRequest(BaseModel):
+    idea: str
+    paper_ids: Optional[List[int]] = None # Context to check against
+
+class TrendAnalysisRequest(BaseModel):
+    paper_ids: List[int]
+
+class IdeaGeneratorRequest(BaseModel):
+    paper_ids: List[int]
+    risk_level: str = "moderate"
+    domain: Optional[str] = None
+
+class MethodCompareRequest(BaseModel):
+    paper_ids: List[int]
 
 @router.post("/query", response_model=QueryResponse)
 async def query_papers(
@@ -88,6 +107,99 @@ async def cross_paper_analysis(
     analysis = await ai_service.cross_paper_analysis(papers_data)
     return {"analysis": analysis}
 
+# Researcher Mode Endpoints
+@router.post("/research-gaps")
+async def detect_research_gaps(
+    *,
+    request: ResearchGapRequest,
+    db: Session = Depends(deps.get_db),
+    current_user: Any = Depends(deps.get_current_user)
+) -> Any:
+    papers = db.query(PaperModel).filter(
+        PaperModel.id.in_(request.paper_ids), 
+        PaperModel.user_id == current_user.id
+    ).all()
+    
+    papers_data = [{"title": p.title, "abstract": p.abstract} for p in papers]
+    gaps = await ai_service.detect_research_gaps(papers_data)
+    return {"gaps": gaps}
+
+@router.post("/novelty-check")
+async def novelty_check(
+    *,
+    request: NoveltyCheckRequest,
+    db: Session = Depends(deps.get_db),
+    current_user: Any = Depends(deps.get_current_user)
+) -> Any:
+    # Use FAISS to find similar chunks globally or in selected subset
+    similar_chunks = await ai_service.search_similar(request.idea, paper_ids=request.paper_ids, top_k=10)
+    result = await ai_service.check_novelty_critique(request.idea, similar_chunks)
+    return result
+
+@router.post("/trend-analysis")
+async def trend_analysis(
+    *,
+    request: TrendAnalysisRequest,
+    db: Session = Depends(deps.get_db),
+    current_user: Any = Depends(deps.get_current_user)
+) -> Any:
+    papers = db.query(PaperModel).filter(
+        PaperModel.id.in_(request.paper_ids), 
+        PaperModel.user_id == current_user.id
+    ).all()
+    
+    papers_data = [{"title": p.title, "abstract": p.abstract} for p in papers]
+    trends = await ai_service.analyze_trends(papers_data)
+    return trends
+
+@router.post("/idea-generator")
+async def generate_ideas(
+    *,
+    request: IdeaGeneratorRequest,
+    db: Session = Depends(deps.get_db),
+    current_user: Any = Depends(deps.get_current_user)
+) -> Any:
+    papers = db.query(PaperModel).filter(
+        PaperModel.id.in_(request.paper_ids), 
+        PaperModel.user_id == current_user.id
+    ).all()
+    
+    papers_data = [{"title": p.title, "abstract": p.abstract} for p in papers]
+    ideas = await ai_service.generate_research_ideas(papers_data, risk_level=request.risk_level)
+    return {"ideas": ideas}
+
+@router.post("/method-compare")
+async def method_compare(
+    *,
+    request: MethodCompareRequest,
+    db: Session = Depends(deps.get_db),
+    current_user: Any = Depends(deps.get_current_user)
+) -> Any:
+    papers = db.query(PaperModel).filter(
+        PaperModel.id.in_(request.paper_ids), 
+        PaperModel.user_id == current_user.id
+    ).all()
+    
+    papers_data = [{"title": p.title, "abstract": p.abstract} for p in papers]
+    comparison = await ai_service.compare_methodologies(papers_data)
+    return {"comparison": comparison}
+
+@router.post("/flaw-detection")
+async def detect_flaws(
+    *,
+    request: ResearchGapRequest, # Reusing simple paper_ids request
+    db: Session = Depends(deps.get_db),
+    current_user: Any = Depends(deps.get_current_user)
+) -> Any:
+    papers = db.query(PaperModel).filter(
+        PaperModel.id.in_(request.paper_ids), 
+        PaperModel.user_id == current_user.id
+    ).all()
+    
+    papers_data = [{"title": p.title, "abstract": p.abstract} for p in papers]
+    flaws = await ai_service.detect_flaws(papers_data)
+    return {"flaws": flaws}
+
 @router.post("/podcast")
 async def generate_podcast(
     *,
@@ -110,7 +222,6 @@ async def generate_podcast(
     podcast_id = f"podcast_{current_user.id}_{int(asyncio.get_event_loop().time())}"
     output_path = os.path.join(AUDIO_DIR, f"{podcast_id}.mp3")
     
-    # Add synthesis to background tasks
     background_tasks.add_task(synthesize_podcast, script, output_path)
     
     return {
@@ -121,30 +232,12 @@ async def generate_podcast(
     }
 
 async def synthesize_podcast(script: List[dict], output_path: str):
-    """Synthesizes a 2-person podcast script using different voices."""
-    # Voice mapping
-    voices = {
-        "Alex": "en-US-AndrewNeural",
-        "Jamie": "en-US-AvaNeural"
-    }
-    
-    # We'll synthesize each line and concatenate or use a simpler approach:
-    # edge-tts doesn't easily concatenate in one call, so we'll generate a combined SSML or just sequence them.
-    # For now, let's sequence them into a single file by appending to a buffer or using a temp file logic.
-    
     combined_script = ""
     for line in script:
         speaker = line.get("speaker", "Alex")
         text = line.get("text", "")
-        # Very simple version: just synthesize all as one for now, or multiple files.
-        # Better: use a temporary file for each and then merge with ffmpeg if available.
-        # But we want to stay lightweight. Let's just use one voice for the prototype or 
-        # generate a single file with SSML if edge-tts supports it.
-        # edge-tts does NOT support SSML multi-voice well.
-        
         combined_script += f"{speaker}: {text}\n\n"
 
-    # Simplified prototype: synthesize the whole thing with one high-quality voice
     communicate = edge_tts.Communicate(combined_script, "en-US-AndrewNeural")
     await communicate.save(output_path)
 

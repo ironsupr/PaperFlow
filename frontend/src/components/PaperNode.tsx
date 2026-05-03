@@ -1,12 +1,16 @@
 import { memo } from 'react';
 import { Handle, Position } from 'reactflow';
-import { ExternalLink, User, Binary, FileCode } from 'lucide-react';
+import { User, Binary, FileCode, TrendingUp, Calendar } from 'lucide-react';
 
 interface PaperNodeData {
   label: string;
   scholarUrl?: string;
   authors?: string;
   isExternal?: boolean;
+  influence?: number;
+  year?: number;
+  domain?: string;
+  topic?: string;
 }
 
 interface PaperNodeProps {
@@ -16,11 +20,16 @@ interface PaperNodeProps {
 
 const PaperNode = ({ data, selected }: PaperNodeProps) => {
   const isExternal = data.isExternal;
+  // Scale node based on influence (citation count in workspace)
+  const influence = data.influence || 0;
+  const scale = 1 + Math.min(influence * 0.1, 0.5);
 
   return (
-    <div className={`px-4 py-3 shadow-2xl rounded border transition-all duration-300 min-w-[200px] max-w-[260px] select-none
+    <div 
+      style={{ transform: `scale(${scale})` }}
+      className={`px-4 py-3 shadow-2xl rounded border transition-all duration-300 min-w-[200px] max-w-[260px] select-none
       ${selected 
-        ? 'bg-accent border-foreground ring-1 ring-foreground/20' 
+        ? 'bg-accent border-foreground ring-1 ring-foreground/20 z-50' 
         : 'bg-card border-border hover:border-foreground/40'}
       ${isExternal ? 'border-dashed' : ''}
     `}>
@@ -34,14 +43,15 @@ const PaperNode = ({ data, selected }: PaperNodeProps) => {
             ) : (
               <FileCode size={12} className="text-muted-foreground" />
             )}
-            <span className="text-[9px] mono text-muted-foreground/60">
+            <span className="text-[9px] mono text-muted-foreground/60 font-bold uppercase tracking-wider">
               {isExternal ? 'EXT_REF' : 'DOC_NODE'}
             </span>
           </div>
-          {data.scholarUrl && (
-            <a href={data.scholarUrl} target="_blank" rel="noreferrer" className="text-muted-foreground hover:text-foreground transition-colors">
-              <ExternalLink size={10} />
-            </a>
+          {influence > 0 && (
+            <div className="flex items-center gap-1 text-primary animate-pulse">
+              <TrendingUp size={10} />
+              <span className="text-[9px] mono font-black">{influence}</span>
+            </div>
           )}
         </div>
 
@@ -49,19 +59,34 @@ const PaperNode = ({ data, selected }: PaperNodeProps) => {
           <h3 className={`text-[11px] font-semibold leading-relaxed line-clamp-2 ${selected ? 'text-foreground' : 'text-foreground/90'}`}>
             {data.label}
           </h3>
-          {data.authors && (
-            <div className="mt-1.5 flex items-center gap-1.5 text-[9px] mono text-muted-foreground">
-              <User size={9} />
-              <span className="truncate">{data.authors}</span>
-            </div>
-          )}
+          <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-1 items-center text-[9px] mono text-muted-foreground">
+            {data.authors && (
+              <div className="flex items-center gap-1 truncate max-w-[120px]">
+                <User size={9} />
+                <span>{data.authors}</span>
+              </div>
+            )}
+            {data.year && (
+              <div className="flex items-center gap-1">
+                <Calendar size={9} />
+                <span>{data.year}</span>
+              </div>
+            )}
+          </div>
         </div>
 
-        {isExternal && (
-          <div className="pt-1">
-            <span className="text-[8px] mono text-muted-foreground/50 border border-border px-1.5 py-0.5 rounded">
-              UNLINKED_SOURCE
-            </span>
+        {(data.domain || data.topic) && (
+          <div className="pt-1 flex gap-1 overflow-hidden">
+            {data.domain && (
+              <span className="text-[7px] mono bg-foreground/5 border border-border px-1.5 py-0.5 rounded text-foreground/60 whitespace-nowrap">
+                {data.domain}
+              </span>
+            )}
+            {data.topic && (
+              <span className="text-[7px] mono bg-primary/5 border border-primary/20 px-1.5 py-0.5 rounded text-primary/70 whitespace-nowrap">
+                {data.topic}
+              </span>
+            )}
           </div>
         )}
       </div>

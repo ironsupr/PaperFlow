@@ -30,6 +30,9 @@ class PaperBase(BaseModel):
     title: Optional[str] = None
     authors: Optional[str] = None
     abstract: Optional[str] = None
+    year: Optional[int] = None
+    domain: Optional[str] = None
+    topic: Optional[str] = None
 
 class PaperCreate(PaperBase):
     title: str
@@ -46,6 +49,9 @@ class PaperInDBBase(PaperBase):
     citation_contexts: Optional[dict] = None
     sections: Optional[dict] = None
     highlights: Optional[List[dict]] = None
+    year: Optional[int] = None
+    domain: Optional[str] = None
+    topic: Optional[str] = None
 
     class Config:
         from_attributes = True

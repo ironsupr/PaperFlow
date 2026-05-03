@@ -70,7 +70,6 @@ export const api = {
     const response = await client.get('/ai/novelty', { params: { paper_id: paperId } });
     return response.data;
   },
-  // New Endpoints
   getGraphData: async () => {
     const response = await client.get('/papers/graph-data');
     return response.data;
@@ -89,6 +88,31 @@ export const api = {
   },
   getNotes: async (paperId: number) => {
     const response = await client.get(`/papers/${paperId}/notes`);
+    return response.data;
+  },
+  // Researcher Mode
+  detectResearchGaps: async (paperIds: number[]) => {
+    const response = await client.post('/ai/research-gaps', { paper_ids: paperIds });
+    return response.data;
+  },
+  noveltyCheck: async (idea: string, paperIds?: number[]) => {
+    const response = await client.post('/ai/novelty-check', { idea, paper_ids: paperIds });
+    return response.data;
+  },
+  analyzeTrends: async (paperIds: number[]) => {
+    const response = await client.post('/ai/trend-analysis', { paper_ids: paperIds });
+    return response.data;
+  },
+  generateIdeas: async (paperIds: number[], risk_level: string = 'moderate') => {
+    const response = await client.post('/ai/idea-generator', { paper_ids: paperIds, risk_level });
+    return response.data;
+  },
+  compareMethods: async (paperIds: number[]) => {
+    const response = await client.post('/ai/method-compare', { paper_ids: paperIds });
+    return response.data;
+  },
+  detectFlaws: async (paperIds: number[]) => {
+    const response = await client.post('/ai/flaw-detection', { paper_ids: paperIds });
     return response.data;
   },
 };

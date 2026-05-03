@@ -2,9 +2,35 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.db.session import engine, Base
 from app.models import user, paper, graph_review
+from sqlalchemy import text
 
 # Create tables
 Base.metadata.create_all(bind=engine)
+
+# Quick Auto-migration for existing SQLite database
+def run_migrations():
+    columns_to_add = [
+        ("year", "INTEGER"),
+        ("domain", "VARCHAR"),
+        ("topic", "VARCHAR"),
+        ("citation_contexts", "JSON"),
+        ("sections", "JSON"),
+        ("highlights", "JSON")
+    ]
+    with engine.connect() as conn:
+        # Check existing columns
+        try:
+            result = conn.execute(text("PRAGMA table_info(papers)"))
+            existing_columns = [row[1] for row in result]
+            for col_name, col_type in columns_to_add:
+                if col_name not in existing_columns:
+                    print(f"Migrating: Adding column {col_name} to papers table...")
+                    conn.execute(text(f"ALTER TABLE papers ADD COLUMN {col_name} {col_type}"))
+            conn.commit()
+        except Exception as e:
+            print(f"Migration warning: {e}")
+
+run_migrations()
 
 app = FastAPI(title="PaperFlow AI API")
 

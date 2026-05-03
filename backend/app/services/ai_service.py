@@ -126,6 +126,30 @@ class AIService:
         except Exception as e:
             return f"AI Error: {str(e)}"
 
+    async def extract_metadata(self, text: str) -> Dict[str, Any]:
+        if not self.llm:
+            return {}
+        
+        prompt = """Extract the following metadata from the provided research paper text:
+        1. YEAR: The publication year (integer).
+        2. DOMAIN: The broad scientific field (e.g., Computer Science, Biology, Physics).
+        3. TOPIC: A more specific sub-topic (e.g., Deep Learning, Genetics, Quantum Mechanics).
+        
+        Format your response exactly as a JSON object: {"year": 2024, "domain": "...", "topic": "..."}
+        TEXT:
+        """ + text[:10000]
+        
+        try:
+            response = await self.llm.generate_content_async(prompt)
+            import json
+            content = response.text
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            return json.loads(content)
+        except Exception as e:
+            print(f"Metadata Extraction Error: {e}")
+            return {"year": None, "domain": "Unknown", "topic": "Unknown"}
+
     async def generate_summary(self, text: str, level: str = "intermediate") -> str:
         if not self.llm:
             return "Gemini API Key not configured."
@@ -280,6 +304,173 @@ class AIService:
         except Exception as e:
             print(f"Podcast Script Error: {e}")
             return []
+
+    async def detect_research_gaps(self, papers_data: List[Dict[str, Any]]) -> str:
+        if not self.llm:
+            return "Intelligence engine not configured."
+        
+        context = ""
+        for p in papers_data:
+            context += f"PAPER: {p['title']}\nABSTRACT: {p['abstract'][:2000]}\n\n"
+        
+        prompt = f"""Identify research gaps and underexplored zones within the following research corpus.
+        Provide a structured analysis:
+        1. SPARSE RESEARCH ZONES: Areas where little work has been done.
+        2. WEAK CONNECTIONS: Topics that are mentioned but lack deep integration.
+        3. RECOMMENDED DIRECTIONS: Strategic paths for new research.
+        
+        RESEARCH CORPUS:
+        {context}
+        """
+        
+        try:
+            response = await self.llm.generate_content_async(prompt)
+            return response.text
+        except Exception as e:
+            return f"Gap Analysis Error: {str(e)}"
+
+    async def check_novelty_critique(self, idea: str, similar_chunks: List[str]) -> Dict[str, Any]:
+        if not self.llm:
+            return {"score": 50, "critique": "AI not configured"}
+        
+        context = "\n---\n".join(similar_chunks)
+        prompt = f"""Compare the following NEW RESEARCH IDEA against the existing literature snippets provided.
+        Evaluate its novelty on a scale of 0 to 100 and provide a brief critique of overlaps.
+        Format your response exactly as a JSON object: {{"score": 85, "critique": "...", "overlaps": ["cited work X covers Y"]}}
+
+        NEW IDEA:
+        {idea}
+
+        LITERATURE SNIPPETS:
+        {context}
+        """
+        
+        try:
+            response = await self.llm.generate_content_async(prompt)
+            import json
+            content = response.text
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            return json.loads(content)
+        except Exception as e:
+            print(f"Novelty Check Error: {e}")
+            return {"score": 50, "critique": f"Analysis failed: {str(e)}", "overlaps": []}
+
+    async def analyze_trends(self, papers_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+        if not self.llm:
+            return {}
+        
+        context = ""
+        for p in papers_data:
+            # We assume title/abstract might contain year or we'd ideally have it in papers_data
+            context += f"PAPER: {p['title']}\nSUMMARY: {p['abstract'][:1000]}\n\n"
+
+        prompt = f"""Analyze trending topics and declining research areas based on the provided corpus.
+        Format your response exactly as a JSON object: 
+        {{
+            "trending": [{{ "topic": "Name", "momentum": "High", "reason": "..." }}],
+            "declining": [{{ "topic": "Name", "reason": "..." }}],
+            "clusters": [{{ "name": "Cluster Name", "papers": ["Title 1", "Title 2"] }}]
+        }}
+
+        CORPUS:
+        {context}
+        """
+        
+        try:
+            response = await self.llm.generate_content_async(prompt)
+            import json
+            content = response.text
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            return json.loads(content)
+        except Exception as e:
+            print(f"Trend Analysis Error: {e}")
+            return {}
+
+    async def generate_research_ideas(self, papers_data: List[Dict[str, Any]], risk_level: str = "moderate") -> List[Dict[str, str]]:
+        if not self.llm:
+            return []
+        
+        context = ""
+        for p in papers_data:
+            context += f"PAPER: {p['title']}\nSUMMARY: {p['abstract'][:1000]}\n\n"
+
+        risk_instruction = {
+            "safe": "focus on incremental improvements and logical next steps.",
+            "moderate": "propose novel combinations of existing methods or new applications.",
+            "moonshot": "suggest radical shifts in methodology or wildly unique theoretical frameworks."
+        }.get(risk_level, "propose a balanced mix of safe and novel ideas.")
+
+        prompt = f"""Generate 3 high-potential research ideas based on the following corpus.
+        Structure your ideas to be {risk_instruction}
+        Format your response exactly as a JSON list of objects: 
+        [{{ "title": "Idea Title", "rationale": "Why it's needed", "methods": "Proposed approach" }}]
+
+        CORPUS:
+        {context}
+        """
+        
+        try:
+            # Adjust temperature for moonshots? LLM parameter not directly in this call but we can instruct via prompt.
+            response = await self.llm.generate_content_async(prompt)
+            import json
+            content = response.text
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            return json.loads(content)
+        except Exception as e:
+            print(f"Idea Generation Error: {e}")
+            return []
+
+    async def compare_methodologies(self, papers_data: List[Dict[str, Any]]) -> str:
+        if not self.llm:
+            return "Intelligence engine not configured."
+        
+        context = ""
+        for p in papers_data:
+            context += f"PAPER: {p['title']}\nABSTRACT/CONTENT: {p['abstract'][:2000]}\n\n"
+        
+        prompt = f"""Compare the specific research methodologies used in the following papers.
+        Highlight:
+        1. STRENGTHS of each approach.
+        2. WEAKNESSES or limitations.
+        3. CORE DIFFERENCES in how they tackle the research problem.
+        
+        PAPERS:
+        {context}
+        """
+        
+        try:
+            response = await self.llm.generate_content_async(prompt)
+            return response.text
+        except Exception as e:
+            return f"Method Comparison Error: {str(e)}"
+
+    async def detect_flaws(self, papers_data: List[Dict[str, Any]]) -> str:
+        if not self.llm:
+            return "Intelligence engine not configured."
+        
+        context = ""
+        for p in papers_data:
+            context += f"PAPER: {p['title']}\nABSTRACT/CONTENT: {p['abstract'][:2000]}\n\n"
+        
+        prompt = f"""Perform a critical 'Flaw Detection' analysis on the following research corpus.
+        Focus on:
+        1. LOGICAL INCONSISTENCIES: Contradictions within or between papers.
+        2. METHODOLOGICAL WEAKNESSES: Small sample sizes, lack of controls, or biased datasets.
+        3. EVIDENTIARY GAPS: Claims that are not sufficiently supported by data.
+        4. POTENTIAL BIASES: Industry influence or narrow perspective.
+        
+        CORPUS:
+        {context}
+        """
+        
+        try:
+            response = await self.llm.generate_content_async(prompt)
+            return response.text
+        except Exception as e:
+            return f"Flaw Detection Error: {str(e)}"
 
     async def index_all_papers(self, db: Session):
         from app.models.paper import Paper

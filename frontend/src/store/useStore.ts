@@ -21,6 +21,7 @@ export interface PaperEdge {
   id: string;
   source: string;
   target: string;
+  type?: string;
   markerEnd?: Record<string, unknown>;
   style?: Record<string, unknown>;
   animated?: boolean;
@@ -44,6 +45,9 @@ export interface Paper {
   citation_contexts?: Record<string, string[]>;
   is_external?: number;
   concepts?: Concept[];
+  year?: number;
+  domain?: string;
+  topic?: string;
 }
 
 interface AppState {
@@ -66,21 +70,32 @@ interface AppState {
   setPapers: (papers: Paper[]) => void;
   fetchPapers: () => Promise<void>;
   fetchGraphData: () => Promise<void>;
-  calculateLayout: () => void;
+  calculateLayout: (mode?: 'standard' | 'timeline' | 'clusters') => void;
   isProcessing: boolean;
   setIsProcessing: (is: boolean) => void;
   activeReaderId: number | null;
   setActiveReaderId: (id: number | null) => void;
   
-  // New: Advanced Intelligence State
+  // Advanced Intelligence State
   crossPaperAnalysis: string | null;
   setCrossPaperAnalysis: (analysis: string | null) => void;
   
-  // New: Podcast State
+  // Podcast State
   podcastStatus: 'idle' | 'processing' | 'ready' | 'error';
   podcastAudioUrl: string | null;
   podcastScript: Array<{ speaker: string; text: string }> | null;
   setPodcastData: (data: { status: any, url: string | null, script: any[] | null }) => void;
+
+  // Researcher Mode State
+  discoveryGaps: string | null;
+  discoveryNovelty: { score: number, critique: string, overlaps: string[] } | null;
+  discoveryTrends: { trending: any[], declining: any[], clusters: any[] } | null;
+  discoveryIdeas: any[] | null;
+  discoveryMethods: string | null;
+  discoveryFlaws: string | null;
+  isDiscoveryLoading: boolean;
+  
+  setDiscoveryState: (data: Partial<AppState>) => void;
   
   clearStore: () => void;
 }
@@ -136,6 +151,16 @@ export const useStore = create<AppState>((set, get) => ({
     podcastScript: data.script 
   }),
 
+  discoveryGaps: null,
+  discoveryNovelty: null,
+  discoveryTrends: null,
+  discoveryIdeas: null,
+  discoveryMethods: null,
+  discoveryFlaws: null,
+  isDiscoveryLoading: false,
+  
+  setDiscoveryState: (data) => set((state) => ({ ...state, ...data })),
+
   clearStore: () => {
     set({ 
       papers: [], 
@@ -145,20 +170,37 @@ export const useStore = create<AppState>((set, get) => ({
       focusedPaperId: null,
       activeReaderId: null,
       crossPaperAnalysis: null,
-      podcastStatus: 'idle'
+      podcastStatus: 'idle',
+      discoveryGaps: null,
+      discoveryNovelty: null,
+      discoveryTrends: null,
+      discoveryIdeas: null,
+      discoveryMethods: null
     });
   },
 
-  calculateLayout: () => {
-    const { papers, focusedPaperId } = get();
-    if (!papers.length) {
+  calculateLayout: (mode = 'standard') => {
+    const { papers, graphData } = get();
+    if (!papers.length && !graphData.nodes.length) {
       set({ graphData: { nodes: [], edges: [] } });
       return;
     }
 
-    // This local calculation is a fallback. 
-    // We prefer fetchGraphData for the rich concept graph.
-    // Keeping this for basic citation network consistency.
+    const nodes = [...graphData.nodes];
+    const edges = [...graphData.edges];
+
+    // Initialize nodes if empty
+    if (nodes.length === 0) {
+      papers.forEach(p => {
+        nodes.push({
+          id: `paper_${p.id}`,
+          position: { x: 0, y: 0 },
+          type: 'paper',
+          data: { label: p.title, year: p.year, domain: p.domain, influence: 0 }
+        });
+      });
+    }
+
     const levels: Record<string, number> = {};
     const adj: Record<string, string[]> = {};
     const inDegree: Record<string, number> = {};
@@ -183,82 +225,69 @@ export const useStore = create<AppState>((set, get) => ({
       });
     }
 
-    const nodesByLevel: Record<number, string[]> = {};
-    papers.forEach((p: Paper) => {
-      const id = String(p.id);
-      const level = levels[id] || 0;
-      nodesByLevel[level] = nodesByLevel[level] || [];
-      nodesByLevel[level].push(id);
+    const domains = Array.from(new Set(papers.map(p => p.domain || 'Uncategorized')));
+    const nodesByDomain: Record<string, string[]> = {};
+    papers.forEach(p => {
+      const d = p.domain || 'Uncategorized';
+      nodesByDomain[d] = nodesByDomain[d] || [];
+      nodesByDomain[d].push(String(p.id));
     });
 
-    const neighborsOfFocus: Paper[] = [];
-    if (focusedPaperId) {
-      const focusedNeighbors = papers.filter(p => 
-        p.id !== focusedPaperId && 
-        (p.reference_ids?.includes(focusedPaperId) || 
-         papers.find(fp => fp.id === focusedPaperId)?.reference_ids?.includes(p.id))
-      );
-      neighborsOfFocus.push(...focusedNeighbors);
-    }
-
-    const nodes = papers.map((p: Paper) => {
-      const id = String(p.id);
-      const isExternal = p.is_external === 1;
-      const calculatePosition = (): { x: number; y: number } => {
-        if (focusedPaperId) {
-          if (id === String(focusedPaperId)) {
-            return { x: 1000, y: 1000 };
-          } else {
-            const neighborIndex = neighborsOfFocus.findIndex(n => String(n.id) === id);
-            if (neighborIndex !== -1) {
-              const angle = (neighborIndex / neighborsOfFocus.length) * 2 * Math.PI;
-              const radius = 600;
-              return {
-                x: 1000 + radius * Math.cos(angle),
-                y: 1000 + radius * Math.sin(angle)
-              };
-            } else {
-              return { x: -5000, y: -5000 };
-            }
-          }
-        } else {
-          const level = levels[id] || 0;
-          const indexInLevel = nodesByLevel[level]?.indexOf(id) || 0;
-          return { x: indexInLevel * 400, y: level * 350 };
-        }
-      };
-      
-      const position = calculatePosition();
-      
-      return {
-        id: `paper_${id}`,
-        position,
-        type: 'paper',
-        data: { 
-          label: p.title, 
-          scholarUrl: p.scholar_url,
-          authors: p.authors,
-          isExternal: isExternal
-        },
-      };
-    });
-
-    const edges: PaperEdge[] = [];
-    papers.forEach((p: Paper) => {
-      if (p.reference_ids) {
-        p.reference_ids.forEach((refId: number) => {
-          edges.push({
-            id: `e${p.id}-${refId}`,
-            source: `paper_${p.id}`,
-            target: `paper_${refId}`,
-            animated: true,
-            style: { stroke: '#3b82f6' },
-          });
-        });
+    const years = Array.from(new Set(papers.map(p => p.year).filter(y => !!y))).sort() as number[];
+    const nodesByYear: Record<number, string[]> = {};
+    papers.forEach(p => {
+      if (p.year) {
+        nodesByYear[p.year] = nodesByYear[p.year] || [];
+        nodesByYear[p.year].push(String(p.id));
       }
     });
 
-    set({ graphData: { nodes, edges } });
+    const updatedNodes = nodes.map((node) => {
+      if (node.type === 'paper') {
+        const pId = node.id.replace('paper_', '');
+        const p = papers.find(pp => String(pp.id) === pId) || node.data;
+        
+        const calculatePosition = (): { x: number; y: number } => {
+          if (mode === 'timeline' && p.year) {
+            const yearIndex = years.indexOf(p.year);
+            const idxInYear = nodesByYear[p.year].indexOf(pId);
+            return { x: idxInYear * 400, y: yearIndex * 450 };
+          } else if (mode === 'clusters') {
+            const domainIndex = domains.indexOf(p.domain || 'Uncategorized');
+            const idxInDomain = nodesByDomain[p.domain || 'Uncategorized'].indexOf(pId);
+            const angle = (idxInDomain / nodesByDomain[p.domain || 'Uncategorized'].length) * 2 * Math.PI;
+            const radius = 350;
+            return {
+              x: domainIndex * 1200 + radius * Math.cos(angle),
+              y: radius * Math.sin(angle)
+            };
+          } else {
+            const level = levels[pId] || 0;
+            const nodesInLevel = papers.filter(np => levels[String(np.id)] === level);
+            const indexInLevel = nodesInLevel.findIndex(np => String(np.id) === pId);
+            return { x: indexInLevel * 450, y: level * 400 };
+          }
+        };
+
+        return { ...node, position: calculatePosition() };
+      } else if (node.type === 'concept') {
+        const connectedPaperEdge = edges.find(e => e.target === node.id || e.source === node.id);
+        const paperNode = nodes.find(n => n.id === connectedPaperEdge?.source);
+        if (paperNode) {
+          return { 
+            ...node, 
+            position: { 
+              x: paperNode.position.x + (Math.random() - 0.5) * 200, 
+              y: paperNode.position.y - 200 
+            } 
+          };
+        }
+        return { ...node, position: { x: Math.random() * 2000, y: -500 } };
+      }
+      return node;
+    });
+
+    set({ graphData: { nodes: updatedNodes, edges } });
   },
 
   fetchGraphData: async () => {
@@ -270,11 +299,8 @@ export const useStore = create<AppState>((set, get) => ({
       });
       if (response.ok) {
         const data = await response.json();
-        // Here we could apply an automatic layout (e.g. using dagre)
-        // For now, let's just use the current papers' level-based layout for papers
-        // and position concepts around them.
         set({ graphData: data });
-        // We'll let the user arrange them or add a simple circular layout for concepts later
+        get().calculateLayout('standard'); 
       }
     } catch (error) {
       console.error('Failed to fetch graph data:', error);
@@ -288,14 +314,10 @@ export const useStore = create<AppState>((set, get) => ({
       const response = await fetch('http://localhost:8000/papers/', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      
       if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
-          get().logout();
-        }
+        if (response.status === 401 || response.status === 403) get().logout();
         return;
       }
-
       const data = await response.json();
       if (Array.isArray(data)) {
         set({ papers: data });

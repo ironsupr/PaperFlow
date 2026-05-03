@@ -226,6 +226,14 @@ class PaperService:
         
         chunks = self.chunk_text(text)
         await ai_service.add_to_index(chunks, paper.id)
+
+        # Extract metadata and concepts
+        metadata = await ai_service.extract_metadata(text)
+        paper.year = metadata.get("year")
+        paper.domain = metadata.get("domain")
+        paper.topic = metadata.get("topic")
+        db.commit()
+
         await self.extract_and_link_concepts(db, paper.id, text)
 
         citation_titles = self.extract_citations_titles(text)
