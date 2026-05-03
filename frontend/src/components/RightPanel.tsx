@@ -20,10 +20,15 @@ import {
   TrendingUp,
   Lightbulb,
   ShieldAlert,
-  FileSearch,
-  AlertTriangle
-  } from 'lucide-react';
-
+  Fingerprint,
+  AlertTriangle,
+  CheckCircle2,
+  AlertCircle,
+  HelpCircle,
+  BarChart3,
+  FileText,
+  ShieldCheck
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../api/client';
 
@@ -46,7 +51,13 @@ const RightPanel = () => {
     discoveryMethods,
     discoveryFlaws,
     isDiscoveryLoading,
-    setDiscoveryState
+    reviewerScores,
+    reviewerClaims,
+    reviewerBias,
+    reviewerReport,
+    isReviewerLoading,
+    setDiscoveryState,
+    setReviewerState
   } = useStore();
   
   const [activeTab, setActiveTab] = useState<'intelligence' | 'citations' | 'discovery' | 'podcast' | 'critique'>('intelligence');
@@ -124,8 +135,10 @@ const RightPanel = () => {
     if (discoveryGaps || discoveryTrends || discoveryIdeas || discoveryMethods || discoveryNovelty) {
       setActiveTab('discovery');
     }
-    if (discoveryFlaws) setActiveTab('critique');
-  }, [discoveryGaps, discoveryTrends, discoveryIdeas, discoveryMethods, discoveryNovelty, discoveryFlaws]);
+    if (discoveryFlaws || reviewerScores || reviewerClaims || reviewerBias || reviewerReport) {
+      setActiveTab('critique');
+    }
+  }, [discoveryGaps, discoveryTrends, discoveryIdeas, discoveryMethods, discoveryNovelty, discoveryFlaws, reviewerScores, reviewerClaims, reviewerBias, reviewerReport]);
 
   useEffect(() => {
     if (podcastStatus !== 'idle') setActiveTab('podcast');
@@ -137,7 +150,6 @@ const RightPanel = () => {
     setRoleInsight(null);
     setDefinitions({});
     
-    // Auto-select summary level based on role
     const level = role === 'student' ? 'beginner' : role === 'reviewer' ? 'technical' : 'intermediate';
     handleFetchSummary(level);
     handleFetchRoleInsight();
@@ -172,6 +184,37 @@ const RightPanel = () => {
       console.error('Novelty check failed:', error);
     } finally {
       setDiscoveryState({ isDiscoveryLoading: false });
+    }
+  };
+
+  // Reviewer Tool Handlers
+  const handleReviewerAction = async (tool: string) => {
+    if (selectedMultiPaperIds.length < 1) return alert("Select at least 1 paper.");
+    setReviewerState({ isReviewerLoading: true });
+    try {
+      let res;
+      switch(tool) {
+        case 'scores':
+          res = await api.getReviewerScores(selectedMultiPaperIds);
+          setReviewerState({ reviewerScores: res });
+          break;
+        case 'claims':
+          res = await api.verifyClaims(selectedMultiPaperIds);
+          setReviewerState({ reviewerClaims: res.claims });
+          break;
+        case 'bias':
+          res = await api.getBiasReport(selectedMultiPaperIds);
+          setReviewerState({ reviewerBias: res.report });
+          break;
+        case 'report':
+          res = await api.generateStructuredReview(selectedMultiPaperIds);
+          setReviewerState({ reviewerReport: res.review });
+          break;
+      }
+    } catch (error) {
+      console.error(`Reviewer tool ${tool} failed:`, error);
+    } finally {
+      setReviewerState({ isReviewerLoading: false });
     }
   };
 
@@ -343,24 +386,74 @@ const RightPanel = () => {
 
           {activeTab === 'critique' && role === 'reviewer' && (
             <motion.div key="critique" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 space-y-8">
-              {isDiscoveryLoading && <div className="flex flex-col items-center gap-3 py-12"><Loader2 className="animate-spin text-primary" size={24} /><p className="text-[10px] mono text-muted-foreground">AUDITING_METHODS...</p></div>}
+              {(isDiscoveryLoading || isReviewerLoading) && <div className="flex flex-col items-center gap-3 py-12"><Loader2 className="animate-spin text-primary" size={24} /><p className="text-[10px] mono text-muted-foreground">AUDITING_METHODS...</p></div>}
+              
+              {/* Scoring Engine UI */}
+              <Section title="Auto Scoring Engine" icon={<BarChart3 size={12} />}>
+                <div className="space-y-4">
+                  <button onClick={() => handleReviewerAction('scores')} className="w-full py-2 bg-foreground text-background text-[10px] font-bold uppercase rounded hover:opacity-90 transition-all shadow-sm">Evaluate Paper Metrics</button>
+                  {reviewerScores && (
+                    <div className="p-4 bg-card border border-border rounded-lg space-y-3">
+                      <ScoreBar label="Clarity" score={reviewerScores.clarity} />
+                      <ScoreBar label="Novelty" score={reviewerScores.novelty} />
+                      <ScoreBar label="Validity" score={reviewerScores.validity} />
+                      <ScoreBar label="Impact" score={reviewerScores.impact} />
+                      <div className="pt-2 border-t border-border flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-primary">Overall Rating</span>
+                        <span className="text-lg font-black text-primary">{reviewerScores.overall}/10</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </Section>
+
+              {/* Claim Verification UI */}
+              <Section title="Claim Verification" icon={<ShieldCheck size={12} />}>
+                <div className="space-y-4">
+                  <button onClick={() => handleReviewerAction('claims')} className="w-full py-2 bg-accent/50 text-foreground text-[10px] font-bold uppercase rounded border border-border hover:bg-accent transition-all">Verify All Claims</button>
+                  {reviewerClaims && (
+                    <div className="space-y-2">
+                      {reviewerClaims.map((c, i) => (
+                        <div key={i} className="p-3 bg-card/20 border border-border/50 rounded-lg space-y-2">
+                          <div className="flex items-start gap-2">
+                            {c.status === 'supported' ? <CheckCircle2 size={12} className="text-green-400 shrink-0 mt-0.5" /> : c.status === 'unsupported' ? <AlertCircle size={12} className="text-red-400 shrink-0 mt-0.5" /> : <HelpCircle size={12} className="text-orange-400 shrink-0 mt-0.5" />}
+                            <p className="text-[10px] font-bold text-foreground leading-snug">{c.claim}</p>
+                          </div>
+                          <p className="text-[9px] text-muted-foreground italic pl-5 leading-relaxed">{c.context}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </Section>
+
               {discoveryFlaws && (
                 <Section title="Flaw Detection" icon={<AlertTriangle size={14} className="text-red-400" />}>
-                  <div className="text-[11px] leading-relaxed text-red-200/80 bg-red-500/5 p-5 rounded border border-red-500/20 whitespace-pre-wrap">
-                    {discoveryFlaws}
-                  </div>
+                  <div className="text-[11px] leading-relaxed text-red-200/80 bg-red-500/5 p-5 rounded border border-red-500/20 whitespace-pre-wrap">{discoveryFlaws}</div>
                 </Section>
               )}
-              {discoveryMethods && (
-                <Section title="Methodological Audit" icon={<FileSearch size={14} />}>
-                  <div className="text-[11px] leading-relaxed text-muted-foreground bg-card/20 p-5 rounded border border-border/50 whitespace-pre-wrap">
-                    {discoveryMethods}
-                  </div>
+
+              {reviewerBias && (
+                <Section title="Bias & Quality Report" icon={<Fingerprint size={12} />}>
+                  <div className="text-[11px] leading-relaxed text-muted-foreground bg-card/20 p-5 rounded border border-border/50 whitespace-pre-wrap">{reviewerBias}</div>
                 </Section>
               )}
-              {!discoveryFlaws && !discoveryMethods && !isDiscoveryLoading && (
-                <EmptyState icon={<ShieldAlert size={24} />} message="Use sidebar tools to audit methodologies" />
-              )}
+
+              {/* Review Generator UI */}
+              <Section title="AI Review Generator" icon={<FileText size={12} />}>
+                <div className="space-y-4">
+                  <button onClick={() => handleReviewerAction('report')} className="w-full py-3 bg-primary text-primary-foreground text-[10px] font-black uppercase tracking-widest rounded hover:opacity-90 transition-all shadow-xl shadow-primary/10">Initialize Formal Review</button>
+                  {reviewerReport && (
+                    <div className="p-5 bg-background border border-border rounded-xl space-y-4">
+                      <div className="flex items-center justify-between border-b border-border pb-3">
+                        <span className="text-[9px] mono font-bold text-muted-foreground uppercase tracking-[0.2em]">Formal_Peer_Review_Output.md</span>
+                        <button onClick={() => navigator.clipboard.writeText(reviewerReport)} className="text-[9px] font-bold text-primary hover:underline">COPY_RAW</button>
+                      </div>
+                      <div className="text-[11px] leading-relaxed text-foreground/80 whitespace-pre-wrap font-sans prose prose-invert prose-xs">{reviewerReport}</div>
+                    </div>
+                  )}
+                </div>
+              </Section>
             </motion.div>
           )}
 
@@ -432,6 +525,18 @@ const Section = ({ title, icon, children }: { title: string; icon: React.ReactNo
   <div className="space-y-4">
     <div className="flex items-center gap-2 text-[10px] mono text-muted-foreground/60 uppercase tracking-wider">{icon}{title}</div>
     {children}
+  </div>
+);
+
+const ScoreBar = ({ label, score }: { label: string, score: number }) => (
+  <div className="space-y-1.5">
+    <div className="flex justify-between items-center text-[9px] mono font-bold text-muted-foreground">
+      <span className="uppercase tracking-widest">{label}</span>
+      <span className="text-foreground">{score}/10</span>
+    </div>
+    <div className="h-1 bg-border/40 rounded-full overflow-hidden">
+      <motion.div initial={{ width: 0 }} animate={{ width: `${score * 10}%` }} className="h-full bg-primary" />
+    </div>
   </div>
 );
 

@@ -115,4 +115,21 @@ export const api = {
     const response = await client.post('/ai/flaw-detection', { paper_ids: paperIds });
     return response.data;
   },
+  // Reviewer Mode
+  getReviewerScores: async (paperIds: number[]) => {
+    const response = await client.post('/ai/reviewer-scores', { paper_ids: paperIds });
+    return response.data;
+  },
+  verifyClaims: async (paperIds: number[]) => {
+    const response = await client.post('/ai/verify-claims', { paper_ids: paperIds });
+    return response.data;
+  },
+  getBiasReport: async (paperIds: number[]) => {
+    const response = await client.post('/ai/bias-report', { paper_ids: paperIds });
+    return response.data;
+  },
+  generateStructuredReview: async (paperIds: number[]) => {
+    const response = await client.post('/ai/structured-review', { paper_ids: paperIds });
+    return response.data;
+  },
 };

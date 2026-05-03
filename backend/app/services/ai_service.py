@@ -362,7 +362,6 @@ class AIService:
         
         context = ""
         for p in papers_data:
-            # We assume title/abstract might contain year or we'd ideally have it in papers_data
             context += f"PAPER: {p['title']}\nSUMMARY: {p['abstract'][:1000]}\n\n"
 
         prompt = f"""Analyze trending topics and declining research areas based on the provided corpus.
@@ -471,6 +470,92 @@ class AIService:
             return response.text
         except Exception as e:
             return f"Flaw Detection Error: {str(e)}"
+
+    # --- New Reviewer Mode Methods ---
+
+    async def generate_reviewer_scores(self, papers_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+        if not self.llm: return {}
+        context = "\n".join([f"PAPER: {p['title']}\nABSTRACT: {p['abstract'][:1500]}" for p in papers_data])
+        prompt = f"""Evaluate the following research on a scale of 0 to 10 for the following metrics:
+        1. CLARITY: How well-written and understandable is the paper?
+        2. NOVELTY: How original and groundbreaking is the research?
+        3. VALIDITY: How scientifically sound is the methodology?
+        4. IMPACT: What is the potential contribution to the field?
+        
+        Format your response as a valid JSON object:
+        {{"clarity": 8, "novelty": 7, "validity": 9, "impact": 8, "overall": 8}}
+        
+        CORPUS:
+        {context}
+        """
+        try:
+            response = await self.llm.generate_content_async(prompt)
+            import json
+            content = response.text
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            return json.loads(content)
+        except Exception as e:
+            print(f"Scoring Error: {e}")
+            return {"clarity": 5, "novelty": 5, "validity": 5, "impact": 5, "overall": 5}
+
+    async def verify_claims(self, papers_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if not self.llm: return []
+        context = "\n".join([f"PAPER: {p['title']}\nABSTRACT/METHODS: {p['abstract'][:2000]}" for p in papers_data])
+        prompt = f"""Identify the top 3-5 major scientific claims made in this research and verify their support in the provided text.
+        Format your response as a JSON list of objects:
+        [{{"claim": "Claim text", "status": "supported", "context": "Reasoning for status"}}]
+        Statuses: 'supported', 'unsupported', 'partial'.
+        
+        CORPUS:
+        {context}
+        """
+        try:
+            response = await self.llm.generate_content_async(prompt)
+            import json
+            content = response.text
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            return json.loads(content)
+        except Exception as e:
+            print(f"Claim Verification Error: {e}")
+            return []
+
+    async def generate_bias_report(self, papers_data: List[Dict[str, Any]]) -> str:
+        if not self.llm: return "AI not configured."
+        context = "\n".join([f"PAPER: {p['title']}\nABSTRACT: {p['abstract'][:2000]}" for p in papers_data])
+        prompt = f"""Analyze the following research for potential bias, reproducibility concerns, and dataset limitations.
+        Provide a concise but technical report.
+        
+        CORPUS:
+        {context}
+        """
+        try:
+            response = await self.llm.generate_content_async(prompt)
+            return response.text
+        except Exception as e:
+            return f"Bias Analysis Error: {str(e)}"
+
+    async def generate_structured_review(self, papers_data: List[Dict[str, Any]]) -> str:
+        if not self.llm: return "AI not configured."
+        context = "\n".join([f"PAPER: {p['title']}\nABSTRACT: {p['abstract'][:2000]}" for p in papers_data])
+        prompt = f"""Generate a formal, structured peer review report for the following research.
+        Include sections:
+        # Peer Review Report
+        ## 1. Summary
+        ## 2. Strengths
+        ## 3. Major Weaknesses
+        ## 4. Minor Points & Suggestions
+        ## 5. Final Recommendation
+        
+        CORPUS:
+        {context}
+        """
+        try:
+            response = await self.llm.generate_content_async(prompt)
+            return response.text
+        except Exception as e:
+            return f"Review Generation Error: {str(e)}"
 
     async def index_all_papers(self, db: Session):
         from app.models.paper import Paper

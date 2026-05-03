@@ -95,7 +95,15 @@ interface AppState {
   discoveryFlaws: string | null;
   isDiscoveryLoading: boolean;
   
+  // Reviewer Mode State
+  reviewerScores: { clarity: number, novelty: number, validity: number, impact: number, overall: number } | null;
+  reviewerClaims: Array<{ claim: string, status: 'supported' | 'unsupported' | 'partial', context: string }> | null;
+  reviewerBias: string | null;
+  reviewerReport: string | null;
+  isReviewerLoading: boolean;
+
   setDiscoveryState: (data: Partial<AppState>) => void;
+  setReviewerState: (data: Partial<AppState>) => void;
   
   clearStore: () => void;
 }
@@ -151,6 +159,7 @@ export const useStore = create<AppState>((set, get) => ({
     podcastScript: data.script 
   }),
 
+  // Researcher Mode Initial State
   discoveryGaps: null,
   discoveryNovelty: null,
   discoveryTrends: null,
@@ -158,8 +167,16 @@ export const useStore = create<AppState>((set, get) => ({
   discoveryMethods: null,
   discoveryFlaws: null,
   isDiscoveryLoading: false,
+
+  // Reviewer Mode Initial State
+  reviewerScores: null,
+  reviewerClaims: null,
+  reviewerBias: null,
+  reviewerReport: null,
+  isReviewerLoading: false,
   
   setDiscoveryState: (data) => set((state) => ({ ...state, ...data })),
+  setReviewerState: (data) => set((state) => ({ ...state, ...data })),
 
   clearStore: () => {
     set({ 
@@ -175,7 +192,11 @@ export const useStore = create<AppState>((set, get) => ({
       discoveryNovelty: null,
       discoveryTrends: null,
       discoveryIdeas: null,
-      discoveryMethods: null
+      discoveryMethods: null,
+      reviewerScores: null,
+      reviewerClaims: null,
+      reviewerBias: null,
+      reviewerReport: null
     });
   },
 

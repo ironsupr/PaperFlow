@@ -151,7 +151,8 @@ class PaperService:
                             scholar_url=pub.get('pub_url') or pub.get('eprint_url'),
                             user_id=paper.user_id,
                             is_external=1,
-                            metadata_json=pub
+                            metadata_json=pub,
+                            year=int(pub['bib'].get('pub_year', 0)) or None
                         )
                         db.add(existing)
                         db.flush()
@@ -169,6 +170,55 @@ class PaperService:
 
     def normalize_title(self, title: str) -> str:
         return re.sub(r'[^\w\s]', '', title).lower().strip()
+
+    async def fetch_metadata_from_semantic_scholar(self, db: Session, paper_id: int):
+        """Fetch metadata from Semantic Scholar API (faster fallback)."""
+        paper = db.query(Paper).filter(Paper.id == paper_id).first()
+        if not paper: return
+        try:
+            import httpx
+            async with httpx.AsyncClient() as client:
+                query = paper.title.replace(' ', '+')
+                response = await client.get(
+                    f"https://api.semanticscholar.org/graph/v1/paper/search?query={query}&limit=1&fields=title,authors,year,url,abstract",
+                    timeout=10.0
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get('data') and len(data['data']) > 0:
+                        pub = data['data'][0]
+                        if paper.authors == "Unknown":
+                            paper.authors = ", ".join([a['name'] for a in pub.get('authors', [])])
+                        if not paper.year:
+                            paper.year = pub.get('year')
+                        if not paper.scholar_url:
+                            paper.scholar_url = pub.get('url')
+                        db.commit()
+                        logger.info(f"Semantic Scholar enrichment success: {paper.title}")
+                        return True
+        except Exception as e:
+            logger.warning(f"Semantic Scholar enrichment failed for '{paper.title}': {e}")
+        return False
+
+    async def fetch_metadata_from_scholar(self, db: Session, paper_id: int):
+        paper = db.query(Paper).filter(Paper.id == paper_id).first()
+        if not paper: return
+        try:
+            logger.info(f"Fetching Scholar metadata fallback for: {paper.title}")
+            search_query = scholarly.search_pubs(paper.title)
+            pub = next(search_query)
+            if paper.authors == "Unknown":
+                authors_data = pub['bib'].get('author', 'Unknown')
+                paper.authors = ", ".join(authors_data) if isinstance(authors_data, list) else str(authors_data)
+            if not paper.year:
+                try:
+                    paper.year = int(pub['bib'].get('pub_year', 0)) or None
+                except: pass
+            if not paper.scholar_url:
+                paper.scholar_url = pub.get('pub_url') or pub.get('eprint_url')
+            db.commit()
+        except Exception as e:
+            logger.warning(f"Scholar fallback failed for '{paper.title}': {e}")
 
     async def extract_and_link_concepts(self, db: Session, paper_id: int, text: str):
         concepts_data = await ai_service.get_core_concepts(text)
@@ -188,6 +238,43 @@ class PaperService:
                 paper.concepts.append(existing_concept)
         
         db.commit()
+
+    async def enrich_paper_background(self, paper_id: int, text: str):
+        """Perform heavy enrichment tasks in the background."""
+        db = SessionLocal()
+        try:
+            paper = db.query(Paper).filter(Paper.id == paper_id).first()
+            if not paper: return
+
+            # 1. AI Metadata Extraction (Year, Domain, Topic)
+            metadata = await ai_service.extract_metadata(text)
+            paper.year = metadata.get("year")
+            paper.domain = metadata.get("domain")
+            paper.topic = metadata.get("topic")
+            db.commit()
+
+            # 2. External Metadata Fallback (Semantic Scholar then Google Scholar)
+            if paper.authors == "Unknown" or not paper.year:
+                success = await self.fetch_metadata_from_semantic_scholar(db, paper.id)
+                if not success:
+                    await self.fetch_metadata_from_scholar(db, paper.id)
+
+            # 3. Concept Mapping
+            await self.extract_and_link_concepts(db, paper.id, text)
+
+            # 4. Citation Discovery
+            citation_titles = self.extract_citations_titles(text)
+            if citation_titles:
+                online_contexts = self.extract_citation_contexts(text, citation_titles)
+                self.fetch_and_link_online_citations_sync(paper.id, citation_titles, online_contexts)
+                
+            db.commit()
+            logger.info(f"Background enrichment complete for paper: {paper.title}")
+        except Exception as e:
+            logger.error(f"Background enrichment failed for paper {paper_id}: {e}")
+            db.rollback()
+        finally:
+            db.close()
 
     async def process_paper(self, db: Session, file: UploadFile, user_id: int, background_tasks: BackgroundTasks) -> Paper:
         file_path = os.path.join(UPLOAD_DIR, file.filename)
@@ -226,20 +313,7 @@ class PaperService:
         
         chunks = self.chunk_text(text)
         await ai_service.add_to_index(chunks, paper.id)
-
-        # Extract metadata and concepts
-        metadata = await ai_service.extract_metadata(text)
-        paper.year = metadata.get("year")
-        paper.domain = metadata.get("domain")
-        paper.topic = metadata.get("topic")
-        db.commit()
-
-        await self.extract_and_link_concepts(db, paper.id, text)
-
-        citation_titles = self.extract_citations_titles(text)
-        if citation_titles:
-            online_contexts = self.extract_citation_contexts(text, citation_titles)
-            background_tasks.add_task(self.fetch_and_link_online_citations_sync, paper.id, citation_titles, online_contexts)
+        background_tasks.add_task(self.enrich_paper_background, paper.id, text)
 
         return paper
 

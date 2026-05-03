@@ -200,6 +200,56 @@ async def detect_flaws(
     flaws = await ai_service.detect_flaws(papers_data)
     return {"flaws": flaws}
 
+# --- Reviewer Mode Endpoints ---
+
+@router.post("/reviewer-scores")
+async def get_reviewer_scores(
+    *,
+    request: ResearchGapRequest,
+    db: Session = Depends(deps.get_db),
+    current_user: Any = Depends(deps.get_current_user)
+) -> Any:
+    papers = db.query(PaperModel).filter(PaperModel.id.in_(request.paper_ids), PaperModel.user_id == current_user.id).all()
+    papers_data = [{"title": p.title, "abstract": p.abstract} for p in papers]
+    scores = await ai_service.generate_reviewer_scores(papers_data)
+    return scores
+
+@router.post("/verify-claims")
+async def verify_claims(
+    *,
+    request: ResearchGapRequest,
+    db: Session = Depends(deps.get_db),
+    current_user: Any = Depends(deps.get_current_user)
+) -> Any:
+    papers = db.query(PaperModel).filter(PaperModel.id.in_(request.paper_ids), PaperModel.user_id == current_user.id).all()
+    papers_data = [{"title": p.title, "abstract": p.abstract} for p in papers]
+    claims = await ai_service.verify_claims(papers_data)
+    return {"claims": claims}
+
+@router.post("/bias-report")
+async def get_bias_report(
+    *,
+    request: ResearchGapRequest,
+    db: Session = Depends(deps.get_db),
+    current_user: Any = Depends(deps.get_current_user)
+) -> Any:
+    papers = db.query(PaperModel).filter(PaperModel.id.in_(request.paper_ids), PaperModel.user_id == current_user.id).all()
+    papers_data = [{"title": p.title, "abstract": p.abstract} for p in papers]
+    report = await ai_service.generate_bias_report(papers_data)
+    return {"report": report}
+
+@router.post("/structured-review")
+async def generate_structured_review(
+    *,
+    request: ResearchGapRequest,
+    db: Session = Depends(deps.get_db),
+    current_user: Any = Depends(deps.get_current_user)
+) -> Any:
+    papers = db.query(PaperModel).filter(PaperModel.id.in_(request.paper_ids), PaperModel.user_id == current_user.id).all()
+    papers_data = [{"title": p.title, "abstract": p.abstract} for p in papers]
+    review = await ai_service.generate_structured_review(papers_data)
+    return {"review": review}
+
 @router.post("/podcast")
 async def generate_podcast(
     *,

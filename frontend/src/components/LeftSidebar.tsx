@@ -51,7 +51,10 @@ const LeftSidebar = () => {
         for (let i = 0; i < files.length; i++) {
           await api.uploadPaper(files[i]);
         }
+        // Initial fetch
         await fetchPapers();
+        // Secondary fetch to ensure all records (especially with fast creation) are synced
+        setTimeout(() => fetchPapers(), 1500);
       } catch (error) {
         console.error('Upload failed:', error);
       } finally {
