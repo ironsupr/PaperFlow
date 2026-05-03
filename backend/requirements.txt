@@ -16,3 +16,4 @@ pdfplumber
 google-generativeai
 grobid-client-python
 scholarly
+edge-tts

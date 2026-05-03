@@ -4,9 +4,10 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload
 from app.api import deps
 from app.models.user import User
-from app.schemas.paper import Paper as PaperSchema
+from app.schemas.paper import Paper as PaperSchema, Note as NoteSchema, NoteCreate
 from app.services.paper_service import paper_service
-from app.models.paper import Paper as PaperModel
+from app.models.paper import Paper as PaperModel, Note as NoteModel, Concept as ConceptModel
+from datetime import datetime
 
 router = APIRouter()
 
@@ -29,8 +30,67 @@ def read_papers(
 ) -> Any:
     return db.query(PaperModel)\
         .options(joinedload(PaperModel.references))\
+        .options(joinedload(PaperModel.concepts))\
         .filter(PaperModel.user_id == current_user.id)\
         .offset(skip).limit(limit).all()
+
+@router.get("/graph-data")
+def get_graph_data(
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user)
+) -> Any:
+    papers = db.query(PaperModel)\
+        .options(joinedload(PaperModel.references))\
+        .options(joinedload(PaperModel.concepts))\
+        .filter(PaperModel.user_id == current_user.id).all()
+    
+    nodes = []
+    edges = []
+    
+    concept_nodes = {} # Use name as key to avoid duplicates in view
+    
+    for paper in papers:
+        nodes.append({
+            "id": f"paper_{paper.id}",
+            "type": "paper",
+            "data": {
+                "label": paper.title,
+                "authors": paper.authors,
+                "isExternal": paper.is_external == 1
+            }
+        })
+        
+        # Citation edges
+        for ref in paper.references:
+            edges.append({
+                "id": f"e_p{paper.id}_p{ref.id}",
+                "source": f"paper_{paper.id}",
+                "target": f"paper_{ref.id}",
+                "type": "citation"
+            })
+            
+        # Concept nodes and edges
+        for concept in paper.concepts:
+            c_id = f"concept_{concept.id}"
+            if c_id not in concept_nodes:
+                concept_nodes[c_id] = {
+                    "id": c_id,
+                    "type": "concept",
+                    "data": {
+                        "label": concept.name,
+                        "description": concept.description
+                    }
+                }
+                nodes.append(concept_nodes[c_id])
+            
+            edges.append({
+                "id": f"e_p{paper.id}_c{concept.id}",
+                "source": f"paper_{paper.id}",
+                "target": c_id,
+                "type": "semantic"
+            })
+            
+    return {"nodes": nodes, "edges": edges}
 
 @router.get("/{id}", response_model=PaperSchema)
 def read_paper(
@@ -42,28 +102,6 @@ def read_paper(
     paper = db.query(PaperModel).filter(PaperModel.id == id, PaperModel.user_id == current_user.id).first()
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found")
-    return paper
-
-@router.post("/{id}/references/{ref_id}", response_model=PaperSchema)
-def add_paper_reference(
-    *,
-    db: Session = Depends(deps.get_db),
-    id: int,
-    ref_id: int,
-    current_user: User = Depends(deps.get_current_user),
-) -> Any:
-    paper = db.query(PaperModel).filter(PaperModel.id == id, PaperModel.user_id == current_user.id).first()
-    reference = db.query(PaperModel).filter(PaperModel.id == ref_id, PaperModel.user_id == current_user.id).first()
-    
-    if not paper or not reference:
-        raise HTTPException(status_code=404, detail="Paper or reference not found")
-    
-    if reference not in paper.references:
-        paper.references.append(reference)
-        db.add(paper)
-        db.commit()
-        db.refresh(paper)
-    
     return paper
 
 @router.delete("/{id}", response_model=dict)
@@ -81,16 +119,6 @@ def delete_paper(
     db.commit()
     return {"status": "success", "message": "Paper deleted"}
 
-@router.delete("/clear/all", response_model=dict)
-def clear_all_papers(
-    *,
-    db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_user),
-) -> Any:
-    db.query(PaperModel).filter(PaperModel.user_id == current_user.id).delete()
-    db.commit()
-    return {"status": "success", "message": "Workspace cleared"}
-
 @router.get("/{id}/file")
 def get_paper_file(
     *,
@@ -103,19 +131,30 @@ def get_paper_file(
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(paper.upload_url, media_type="application/pdf")
 
-@router.post("/{id}/highlights", response_model=PaperSchema)
-def update_paper_highlights(
+# Notes Endpoints
+@router.post("/{id}/notes", response_model=NoteSchema)
+def create_note(
     *,
     db: Session = Depends(deps.get_db),
     id: int,
-    highlights: List[dict],
+    note_in: NoteCreate,
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
-    paper = db.query(PaperModel).filter(PaperModel.id == id, PaperModel.user_id == current_user.id).first()
-    if not paper:
-        raise HTTPException(status_code=404, detail="Paper not found")
-    paper.highlights = highlights
-    db.add(paper)
+    note = NoteModel(
+        **note_in.dict(),
+        user_id=current_user.id,
+        created_at=datetime.utcnow().isoformat()
+    )
+    db.add(note)
     db.commit()
-    db.refresh(paper)
-    return paper
+    db.refresh(note)
+    return note
+
+@router.get("/{id}/notes", response_model=List[NoteSchema])
+def get_paper_notes(
+    *,
+    db: Session = Depends(deps.get_db),
+    id: int,
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    return db.query(NoteModel).filter(NoteModel.paper_id == id, NoteModel.user_id == current_user.id).all()

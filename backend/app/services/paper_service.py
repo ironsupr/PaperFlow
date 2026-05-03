@@ -6,7 +6,7 @@ from typing import List, Dict, Any
 from fastapi import UploadFile, BackgroundTasks
 import pdfplumber
 from scholarly import scholarly
-from app.models.paper import Paper
+from app.models.paper import Paper, Concept
 from app.services.ai_service import ai_service
 from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
@@ -14,7 +14,6 @@ from app.db.session import SessionLocal
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# Set up logging for background tasks
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -40,26 +39,23 @@ class PaperService:
         return text
 
     def extract_sections(self, text: str) -> Dict[str, str]:
-        # Heuristic section extraction based on common academic headers
         section_headers = [
             "Abstract", "Introduction", "Methods", "Methodology", 
             "Results", "Discussion", "Conclusion", "References", "Bibliography"
         ]
         
         found_sections = {}
-        # Simple split by regex finding headers at start of lines
         pattern = r'\n\s*(' + '|'.join(section_headers) + r')\s*\n'
         splits = re.split(pattern, text, flags=re.IGNORECASE)
         
-        # First part is usually metadata/title
         if splits and len(splits) > 0:
-            found_sections["Header"] = splits[0][:1000] # Cap length
+            found_sections["Header"] = splits[0][:1000]
             
         for i in range(1, len(splits), 2):
             if i + 1 < len(splits):
                 header = splits[i].capitalize()
                 content = splits[i+1].strip()
-                found_sections[header] = content[:5000] # Cap length per section
+                found_sections[header] = content[:5000]
                 
         return found_sections
 
@@ -102,10 +98,6 @@ class PaperService:
             cite = cite.strip()
             if not cite: continue
             cite_flat = cite.replace('\n', ' ')
-            quoted = re.findall(r'\"(.*?)\"', cite_flat)
-            if quoted:
-                titles.extend(quoted)
-                continue
             parts = cite_flat.split('.')
             for part in parts:
                 part = part.strip()
@@ -178,20 +170,33 @@ class PaperService:
     def normalize_title(self, title: str) -> str:
         return re.sub(r'[^\w\s]', '', title).lower().strip()
 
+    async def extract_and_link_concepts(self, db: Session, paper_id: int, text: str):
+        concepts_data = await ai_service.get_core_concepts(text)
+        paper = db.query(Paper).filter(Paper.id == paper_id).first()
+        if not paper: return
+
+        for c_data in concepts_data:
+            concept_name = c_data.get("name")
+            if not concept_name: continue
+            existing_concept = db.query(Concept).filter(Concept.name == concept_name).first()
+            if not existing_concept:
+                existing_concept = Concept(name=concept_name, description=c_data.get("description"))
+                db.add(existing_concept)
+                db.flush()
+            
+            if existing_concept not in paper.concepts:
+                paper.concepts.append(existing_concept)
+        
+        db.commit()
+
     async def process_paper(self, db: Session, file: UploadFile, user_id: int, background_tasks: BackgroundTasks) -> Paper:
         file_path = os.path.join(UPLOAD_DIR, file.filename)
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
         text = self.parse_pdf(file_path)
-        
-        # Use AI to refine section detection and extract a better abstract
         sections = self.extract_sections(text)
         
-        # Add to AI index
-        chunks = self.chunk_text(text)
-        ai_service.add_to_index(chunks)
-
         paper = Paper(
             title=file.filename.replace(".pdf", ""),
             authors="Unknown",
@@ -219,6 +224,10 @@ class PaperService:
         db.commit()
         db.refresh(paper)
         
+        chunks = self.chunk_text(text)
+        await ai_service.add_to_index(chunks, paper.id)
+        await self.extract_and_link_concepts(db, paper.id, text)
+
         citation_titles = self.extract_citations_titles(text)
         if citation_titles:
             online_contexts = self.extract_citation_contexts(text, citation_titles)

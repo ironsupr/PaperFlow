@@ -16,7 +16,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 function App() {
   return (
     <Router>
-      <div className="h-screen w-full bg-[#020617] text-white overflow-hidden">
+      <div className="h-screen w-full bg-background text-foreground overflow-hidden">
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/auth" element={<AuthPage />} />

@@ -1,5 +1,30 @@
-from typing import Optional, List
+from typing import Optional, List, Any
 from pydantic import BaseModel
+
+class ConceptBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+class Concept(ConceptBase):
+    id: int
+    class Config:
+        from_attributes = True
+
+class NoteBase(BaseModel):
+    content: str
+    tags: Optional[List[str]] = None
+    position_data: Optional[dict] = None
+    paper_id: int
+
+class NoteCreate(NoteBase):
+    pass
+
+class Note(NoteBase):
+    id: int
+    user_id: int
+    created_at: str
+    class Config:
+        from_attributes = True
 
 class PaperBase(BaseModel):
     title: Optional[str] = None
@@ -27,6 +52,7 @@ class PaperInDBBase(PaperBase):
 
 class Paper(PaperInDBBase):
     reference_ids: List[int] = []
+    concepts: List[Concept] = []
     
     class Config:
         from_attributes = True

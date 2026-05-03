@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Brain, Mail, Lock, User, ArrowRight, Loader2 } from 'lucide-react';
+import { BrainCircuit, Loader2, ChevronRight } from 'lucide-react';
 import { useStore } from '../store/useStore';
 
 const AuthPage = () => {
@@ -46,92 +46,88 @@ const AuthPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#020617] text-white flex items-center justify-center p-6 relative overflow-hidden">
-      {/* Background Orbs */}
-      <div className="absolute top-1/4 -left-20 w-96 h-96 bg-blue-600/10 blur-[100px] rounded-full animate-pulse" />
-      <div className="absolute bottom-1/4 -right-20 w-96 h-96 bg-indigo-600/10 blur-[100px] rounded-full animate-pulse" />
-
+    <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-6 relative overflow-hidden font-sans">
       <motion.div 
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md bg-slate-900/50 backdrop-blur-2xl border border-white/10 p-8 rounded-3xl shadow-2xl relative z-10"
+        transition={{ duration: 0.6, ease: "easeOut" }}
+        className="w-full max-w-[400px] space-y-12 relative z-10"
       >
-        <div className="text-center mb-8">
-          <div className="inline-flex bg-blue-600 p-2.5 rounded-2xl mb-4 shadow-lg shadow-blue-500/20">
-            <Brain size={24} />
+        <div className="space-y-6">
+          <div className="flex items-center gap-3">
+            <div className="bg-foreground p-1.5 rounded-sm">
+              <BrainCircuit size={20} className="text-background" />
+            </div>
+            <span className="font-semibold text-xl tracking-tight">PaperFlow</span>
           </div>
-          <h2 className="text-2xl font-bold">{isLogin ? 'Welcome Back' : 'Create Account'}</h2>
-          <p className="text-slate-400 text-sm mt-2">Enter your details to access your research brain</p>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-semibold tracking-tight">{isLogin ? 'Sign in to workspace' : 'Create your account'}</h2>
+            <p className="text-muted-foreground text-sm font-medium">Neural Research Protocol <span className="mono text-[11px] ml-1 opacity-60">v1.0.4-stable</span></p>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-6">
           {!isLogin && (
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">Full Name</label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-                <input 
-                  type="text"
-                  placeholder="John Doe"
-                  required
-                  className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                  value={formData.fullName}
-                  onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                />
-              </div>
+              <label className="text-xs font-semibold text-muted-foreground/80">Full Name</label>
+              <input 
+                type="text"
+                placeholder="Jane Cooper"
+                required
+                className="w-full bg-card/30 border border-border rounded py-2.5 px-3 text-sm focus:outline-none focus:border-foreground/30 transition-all font-normal"
+                value={formData.fullName}
+                onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+              />
             </div>
           )}
 
           <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">Email Address</label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-              <input 
-                type="email"
-                placeholder="name@company.com"
-                required
-                className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              />
-            </div>
+            <label className="text-xs font-semibold text-muted-foreground/80">Email address</label>
+            <input 
+              type="email"
+              placeholder="name@company.com"
+              required
+              className="w-full bg-card/30 border border-border rounded py-2.5 px-3 text-sm focus:outline-none focus:border-foreground/30 transition-all font-normal"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            />
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">Password</label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-              <input 
-                type="password"
-                placeholder="••••••••"
-                required
-                className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              />
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-muted-foreground/80">Password</label>
+              {isLogin && <button type="button" className="text-xs font-medium text-muted-foreground hover:text-foreground">Forgot password?</button>}
             </div>
+            <input 
+              type="password"
+              placeholder="••••••••"
+              required
+              className="w-full bg-card/30 border border-border rounded py-2.5 px-3 text-sm focus:outline-none focus:border-foreground/30 transition-all font-normal"
+              value={formData.password}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+            />
           </div>
 
           <button 
             type="submit" 
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-blue-500/20 disabled:opacity-50 disabled:hover:scale-100"
+            className="w-full bg-foreground text-background py-2.5 rounded text-sm font-semibold flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50"
           >
-            {loading ? <Loader2 className="animate-spin" size={20} /> : (
+            {loading ? <Loader2 className="animate-spin" size={16} /> : (
               <>
-                {isLogin ? 'Sign In' : 'Create Account'}
-                <ArrowRight size={18} />
+                {isLogin ? 'Continue' : 'Initialize Account'}
+                <ChevronRight size={16} />
               </>
             )}
           </button>
         </form>
 
-        <div className="mt-6 text-center">
+        <div className="text-center">
           <button 
             onClick={() => setIsLogin(!isLogin)}
-            className="text-sm text-slate-400 hover:text-white transition-colors"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
-            {isLogin ? "Don't have an account? Sign Up" : "Already have an account? Sign In"}
+            {isLogin ? "Don't have an account? Create one" : "Already have an account? Sign in"}
           </button>
         </div>
       </motion.div>

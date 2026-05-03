@@ -8,6 +8,16 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="PaperFlow AI API")
 
+@app.on_event("startup")
+async def startup_event():
+    from app.db.session import SessionLocal
+    from app.services.ai_service import ai_service
+    db = SessionLocal()
+    try:
+        await ai_service.index_all_papers(db)
+    finally:
+        db.close()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

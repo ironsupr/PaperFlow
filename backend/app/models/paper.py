@@ -11,6 +11,37 @@ paper_references = Table(
     Column("reference_id", Integer, ForeignKey("papers.id"), primary_key=True),
 )
 
+# Association table for Paper and Concept
+paper_concepts = Table(
+    "paper_concepts",
+    Base.metadata,
+    Column("paper_id", Integer, ForeignKey("papers.id"), primary_key=True),
+    Column("concept_id", Integer, ForeignKey("concepts.id"), primary_key=True),
+)
+
+class Concept(Base):
+    __tablename__ = "concepts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True)
+    description = Column(Text, nullable=True)
+
+    papers = relationship("Paper", secondary=paper_concepts, back_populates="concepts")
+
+class Note(Base):
+    __tablename__ = "notes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    content = Column(Text)
+    tags = Column(JSON, nullable=True) # ["AI", "Methods"]
+    position_data = Column(JSON, nullable=True) # { "page": 1, "rect": [...] }
+    paper_id = Column(Integer, ForeignKey("papers.id"))
+    user_id = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(String) # For simplicity, can be DateTime
+
+    paper = relationship("Paper", back_populates="notes")
+    user = relationship("User")
+
 class Paper(Base):
     __tablename__ = "papers"
 
@@ -29,7 +60,7 @@ class Paper(Base):
 
     owner = relationship("User")
     
-    # Self-referential relationship
+    # Relationships
     references = relationship(
         "Paper",
         secondary=paper_references,
@@ -37,6 +68,9 @@ class Paper(Base):
         secondaryjoin=id == paper_references.c.reference_id,
         backref="cited_by"
     )
+    
+    concepts = relationship("Concept", secondary=paper_concepts, back_populates="papers")
+    notes = relationship("Note", back_populates="paper", cascade="all, delete-orphan")
 
     @property
     def reference_ids(self) -> List[int]:

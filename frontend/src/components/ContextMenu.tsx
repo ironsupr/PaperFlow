@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import { useCallback } from 'react';
 import { useStore } from '../store/useStore';
 import { api } from '../api/client';
 import { Trash2, ExternalLink, Info } from 'lucide-react';

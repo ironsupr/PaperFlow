@@ -1,68 +1,194 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import * as ResizablePanels from 'react-resizable-panels';
 import GraphView from './GraphView';
 import RightPanel from './RightPanel';
 import LeftSidebar from './LeftSidebar';
-import BottomHUD from './BottomHUD';
 import PaperReader from './PaperReader';
 import { useStore } from '../store/useStore';
-import { motion } from 'framer-motion';
+import { 
+  Files, 
+  Search,
+  Settings,
+  User,
+  LogOut,
+  BrainCircuit,
+  MessageSquare,
+  Activity,
+  ChevronLeft,
+  ChevronRight,
+  Database,
+  Cpu
+} from 'lucide-react';
 
 const Workspace = () => {
-  const { role, fetchPapers } = useStore();
+  const { fetchPapers, activeReaderId, logout } = useStore();
+  const [leftSidebarVisible, setLeftSidebarVisible] = useState(true);
+  const [rightSidebarVisible, setRightSidebarVisible] = useState(true);
 
   useEffect(() => {
     fetchPapers();
-  }, []);
+  }, [fetchPapers]);
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-[#0f172a]">
-      {/* Background Graph Layer */}
-      <div className="absolute inset-0 z-0">
-        <GraphView />
+    <div className="flex flex-col h-screen w-full bg-background overflow-hidden text-foreground font-sans selection:bg-primary/10">
+      <div className="flex flex-1 overflow-hidden">
+        {/* Activity Bar - Far Left (VS Code Style) */}
+        <div className="w-12 border-r border-border flex flex-col items-center py-4 bg-background z-50 shrink-0">
+          <div className="flex flex-col items-center gap-2 flex-1 w-full">
+            <div className="p-2 mb-4 text-foreground/80">
+              <BrainCircuit size={20} />
+            </div>
+            <ActivityIcon 
+              icon={<Files size={20} />} 
+              active={leftSidebarVisible} 
+              onClick={() => setLeftSidebarVisible(!leftSidebarVisible)}
+            />
+            <ActivityIcon icon={<Search size={20} />} />
+            <ActivityIcon icon={<Activity size={20} />} />
+            <ActivityIcon icon={<Database size={20} />} />
+          </div>
+          <div className="flex flex-col items-center gap-2 w-full">
+            <ActivityIcon 
+              icon={<MessageSquare size={20} />} 
+              active={rightSidebarVisible}
+              onClick={() => setRightSidebarVisible(!rightSidebarVisible)}
+            />
+            <ActivityIcon icon={<User size={20} />} />
+            <ActivityIcon icon={<Settings size={20} />} />
+            <button 
+              onClick={() => logout()}
+              className="p-3 text-muted-foreground hover:text-destructive transition-colors"
+            >
+              <LogOut size={20} />
+            </button>
+          </div>
+        </div>
+
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <ResizablePanels.PanelGroup direction="horizontal">
+            {/* Left Sidebar - Explorer */}
+            {leftSidebarVisible && (
+              <>
+                <ResizablePanels.Panel defaultSize={20} minSize={15} className="bg-card/30 border-r border-border">
+                  <div className="h-full flex flex-col">
+                    <div className="h-9 px-4 flex items-center justify-between border-b border-border/50 bg-background/50">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Explorer</span>
+                      <button onClick={() => setLeftSidebarVisible(false)} className="text-muted-foreground hover:text-foreground">
+                        <ChevronLeft size={14} />
+                      </button>
+                    </div>
+                    <div className="flex-1 overflow-hidden">
+                      <LeftSidebar />
+                    </div>
+                  </div>
+                </ResizablePanels.Panel>
+                <ResizablePanels.PanelResizeHandle className="resize-handle" />
+              </>
+            )}
+
+            {/* Center Area - Editor/Graph */}
+            <ResizablePanels.Panel defaultSize={rightSidebarVisible ? 55 : 80} minSize={30}>
+              <div className="h-full flex flex-col bg-background">
+                {/* Tab Bar */}
+                <div className="h-9 bg-card/20 border-b border-border flex items-center overflow-hidden">
+                  <Tab label="Network Graph" active={!activeReaderId} />
+                  {activeReaderId && <Tab label="Document Reader" active={true} closable />}
+                </div>
+
+                <div className="flex-1 relative overflow-hidden">
+                  <ResizablePanels.PanelGroup direction="horizontal">
+                    <ResizablePanels.Panel defaultSize={activeReaderId ? 50 : 100} minSize={20}>
+                      <div className="h-full w-full relative">
+                        <GraphView />
+                      </div>
+                    </ResizablePanels.Panel>
+                    
+                    {activeReaderId && (
+                      <>
+                        <ResizablePanels.PanelResizeHandle className="resize-handle" />
+                        <ResizablePanels.Panel defaultSize={50} minSize={20}>
+                          <div className="h-full w-full bg-background border-l border-border/50">
+                            <PaperReader />
+                          </div>
+                        </ResizablePanels.Panel>
+                      </>
+                    )}
+                  </ResizablePanels.PanelGroup>
+                </div>
+              </div>
+            </ResizablePanels.Panel>
+
+            {/* Right Sidebar - AI & Details */}
+            {rightSidebarVisible && (
+              <>
+                <ResizablePanels.PanelResizeHandle className="resize-handle" />
+                <ResizablePanels.Panel defaultSize={25} minSize={20} className="bg-card/30 border-l border-border">
+                  <div className="h-full flex flex-col">
+                    <div className="h-9 px-4 flex items-center justify-between border-b border-border/50 bg-background/50">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Intelligence</span>
+                      <button onClick={() => setRightSidebarVisible(false)} className="text-muted-foreground hover:text-foreground">
+                        <ChevronRight size={14} />
+                      </button>
+                    </div>
+                    <div className="flex-1 overflow-hidden">
+                      <RightPanel />
+                    </div>
+                  </div>
+                </ResizablePanels.Panel>
+              </>
+            )}
+          </ResizablePanels.PanelGroup>
+        </div>
       </div>
 
-      {/* Top Header Navigation Layer Label */}
-      <div className="absolute top-8 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-        <motion.div 
-          initial={{ y: -20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          className="bg-slate-900/40 backdrop-blur-xl border border-white/10 px-8 py-3 rounded-2xl flex items-center gap-10 shadow-2xl"
-        >
-          <NavStep label="Explore" active />
-          <div className="w-1 h-1 bg-slate-700 rounded-full" />
-          <NavStep label="Understand" />
-          <div className="w-1 h-1 bg-slate-700 rounded-full" />
-          <NavStep label="Synthesize" />
-          <div className="w-1 h-1 bg-slate-700 rounded-full" />
-          <NavStep label="Evaluate" />
-        </motion.div>
+      {/* Status Bar - Bottom */}
+      <div className="h-6 bg-primary text-primary-foreground border-t border-border flex items-center justify-between px-3 text-[10px] mono font-medium z-50">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5 hover:bg-black/10 px-1.5 h-full cursor-pointer transition-colors">
+            <Cpu size={12} />
+            <span>NEURAL_CORE: ONLINE</span>
+          </div>
+          <div className="flex items-center gap-1.5 hover:bg-black/10 px-1.5 h-full cursor-pointer transition-colors">
+            <Database size={12} />
+            <span>SYNC: 2.4ms</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5 px-1.5 h-full opacity-80">
+            <span>UTF-8</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-1.5 h-full opacity-80">
+            <span>TypeScript JSX</span>
+          </div>
+          <div className="flex items-center gap-1.5 hover:bg-black/10 px-1.5 h-full cursor-pointer transition-colors">
+            <span>WORKSPACE: MAIN</span>
+          </div>
+        </div>
       </div>
-
-      {/* Left Navigation Sidebar */}
-      <div className="absolute top-6 left-6 bottom-32 z-20 w-[280px]">
-        <LeftSidebar />
-      </div>
-
-      {/* Right Intelligence Panel */}
-      <div className="absolute top-6 right-6 bottom-32 z-20 w-[420px]">
-        <RightPanel />
-      </div>
-
-      {/* Bottom Command HUD */}
-      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20 w-full max-w-2xl">
-        <BottomHUD />
-      </div>
-
-      {/* Full-Screen Paper Reader Overlay */}
-      <PaperReader />
     </div>
   );
 };
 
-const NavStep = ({ label, active }: { label: string; active?: boolean }) => (
-  <span className={`text-[11px] font-bold uppercase tracking-[0.2em] transition-all ${active ? 'text-blue-400 drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]' : 'text-slate-600'}`}>
-    {label}
-  </span>
+const ActivityIcon = ({ icon, active, onClick }: { icon: React.ReactNode; active?: boolean; onClick?: () => void }) => (
+  <button 
+    onClick={onClick}
+    className={`w-full p-3 flex justify-center transition-all relative group`}
+  >
+    <div className={`transition-colors ${active ? 'text-foreground' : 'text-muted-foreground group-hover:text-foreground'}`}>
+      {icon}
+    </div>
+    {active && (
+      <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-foreground" />
+    )}
+  </button>
+);
+
+const Tab = ({ label, active, closable }: { label: string; active?: boolean; closable?: boolean }) => (
+  <div className={`h-full flex items-center px-4 gap-3 border-r border-border transition-colors cursor-pointer text-xs font-medium ${active ? 'bg-background text-foreground' : 'bg-card/10 text-muted-foreground hover:bg-card/20'}`}>
+    <span className={active ? '' : 'opacity-70'}>{label}</span>
+    {closable && <div className="p-0.5 rounded-sm hover:bg-muted transition-colors opacity-50 hover:opacity-100">×</div>}
+  </div>
 );
 
 export default Workspace;
