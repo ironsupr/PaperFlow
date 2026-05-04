@@ -59,12 +59,12 @@ const GraphView = () => {
       ...edge,
       markerEnd: {
         type: MarkerType.ArrowClosed,
-        color: edge.type === 'semantic' ? '#ffffff' : '#52525b',
+        color: '#ffffff',
       },
       style: { 
-        stroke: edge.type === 'semantic' ? '#ffffff' : '#52525b', 
-        strokeWidth: edge.type === 'semantic' ? 2 : 1.5, 
-        opacity: edge.type === 'semantic' ? 0.6 : 0.4,
+        stroke: '#ffffff', 
+        strokeWidth: edge.type === 'semantic' ? 2 : 2.5, 
+        opacity: edge.type === 'semantic' ? 0.5 : 0.8,
         strokeDasharray: edge.type === 'semantic' ? '5 5' : 'none'
       },
       animated: edge.type === 'citation',

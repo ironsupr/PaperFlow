@@ -25,7 +25,8 @@ import {
 
 const Workspace = () => {
   const { 
-    fetchPapers, 
+    fetchPapers,
+    fetchGraphData,
     activeReaderId, 
     logout, 
     floatingReaderIds, 
@@ -41,7 +42,8 @@ const Workspace = () => {
 
   useEffect(() => {
     fetchPapers();
-  }, [fetchPapers]);
+    fetchGraphData();
+  }, [fetchPapers, fetchGraphData]);
 
   return (
     <div className="flex flex-col h-screen w-full bg-background overflow-hidden text-foreground font-sans selection:bg-primary/10 relative">

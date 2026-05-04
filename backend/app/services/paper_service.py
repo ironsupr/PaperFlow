@@ -128,35 +128,102 @@ class PaperService:
                     contexts[title].append(sentence.strip())
         return contexts
 
-    def fetch_and_link_online_citations_sync(self, paper_id: int, titles: List[str], contexts: Dict[str, List[str]]):
+    async def fetch_paper_from_semantic_scholar(self, title: str) -> Dict[str, Any] | None:
+        """Search for a paper on Semantic Scholar API."""
+        try:
+            async with httpx.AsyncClient() as client:
+                query = title.replace(' ', '+')
+                response = await client.get(
+                    f"https://api.semanticscholar.org/graph/v1/paper/search?query={query}&limit=1&fields=title,authors,year,url,abstract,venue,externalIds",
+                    timeout=15.0
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get('data') and len(data['data']) > 0:
+                        pub = data['data'][0]
+                        return {
+                            'title': pub.get('title'),
+                            'authors': ", ".join([a['name'] for a in pub.get('authors', [])]) if pub.get('authors') else 'Unknown',
+                            'year': pub.get('year'),
+                            'url': pub.get('url'),
+                            'abstract': pub.get('abstract', 'No abstract available'),
+                            'venue': pub.get('venue'),
+                            'external_ids': pub.get('externalIds', {}),
+                        }
+        except Exception as e:
+            logger.warning(f"Semantic Scholar citation search failed for '{title}': {e}")
+        return None
+
+    async def fetch_paper_from_google_scholar(self, title: str) -> Dict[str, Any] | None:
+        """Search for a paper on Google Scholar with retry logic."""
+        import time
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                if attempt > 0:
+                    delay = 2 ** attempt + (attempt * 0.5)
+                    logger.info(f"Retrying Google Scholar search for '{title}' (attempt {attempt + 1}/{max_retries}), waiting {delay}s")
+                    time.sleep(delay)
+                search_query = scholarly.search_pubs(title)
+                pub = next(search_query)
+                return {
+                    'title': pub['bib']['title'],
+                    'authors': ", ".join(pub['bib'].get('author', [])) if pub['bib'].get('author') else 'Unknown',
+                    'year': int(pub['bib'].get('pub_year', 0)) or None,
+                    'url': pub.get('pub_url') or pub.get('eprint_url'),
+                    'abstract': pub['bib'].get('abstract', 'No abstract available'),
+                }
+            except Exception as e:
+                error_str = str(e).lower()
+                if 'captcha' in error_str or '429' in error_str or 'blocked' in error_str:
+                    logger.warning(f"Google Scholar CAPTCHA/rate limit for '{title}' (attempt {attempt + 1})")
+                    if attempt < max_retries - 1:
+                        time.sleep(5 * (attempt + 1))
+                    continue
+                logger.warning(f"Google Scholar search failed for '{title}': {e}")
+                break
+        return None
+
+    async def fetch_and_link_online_citations_sync(self, paper_id: int, titles: List[str], contexts: Dict[str, List[str]]):
         db = SessionLocal()
         try:
             paper = db.query(Paper).filter(Paper.id == paper_id).first()
             if not paper: return
             new_contexts = paper.citation_contexts or {}
+
             for title in titles:
                 try:
                     search_title = re.sub(r'[^\w\s]', ' ', title).strip()
                     if not search_title: continue
-                    search_query = scholarly.search_pubs(search_title)
-                    pub = next(search_query)
-                    pub_title = pub['bib']['title']
+
+                    logger.info(f"Searching for citation: {search_title}")
+
+                    pub_data = await self.fetch_paper_from_semantic_scholar(search_title)
+                    source = "Semantic Scholar"
+                    if not pub_data:
+                        pub_data = await self.fetch_paper_from_google_scholar(search_title)
+                        source = "Google Scholar"
+
+                    if not pub_data or not pub_data.get('title'):
+                        logger.warning(f"No results found for citation: {title}")
+                        continue
+
+                    pub_title = pub_data['title']
                     existing = db.query(Paper).filter(Paper.title == pub_title).first()
                     if not existing:
-                        authors_data = pub['bib'].get('author', 'Unknown')
-                        authors_str = ", ".join(authors_data) if isinstance(authors_data, list) else str(authors_data)
                         existing = Paper(
                             title=pub_title,
-                            authors=authors_str,
-                            abstract=pub['bib'].get('abstract', 'No abstract available'),
-                            scholar_url=pub.get('pub_url') or pub.get('eprint_url'),
+                            authors=pub_data.get('authors', 'Unknown'),
+                            abstract=pub_data.get('abstract', 'No abstract available'),
+                            scholar_url=pub_data.get('url'),
                             user_id=paper.user_id,
                             is_external=1,
-                            metadata_json=pub,
-                            year=int(pub['bib'].get('pub_year', 0)) or None
+                            year=pub_data.get('year')
                         )
                         db.add(existing)
                         db.flush()
+                        logger.info(f"Added new citation from {source}: {pub_title}")
+
                     if existing not in paper.references:
                         paper.references.append(existing)
                         if title in contexts:
@@ -266,7 +333,7 @@ class PaperService:
             citation_titles = self.extract_citations_titles(text)
             if citation_titles:
                 online_contexts = self.extract_citation_contexts(text, citation_titles)
-                self.fetch_and_link_online_citations_sync(paper.id, citation_titles, online_contexts)
+                await self.fetch_and_link_online_citations_sync(paper.id, citation_titles, online_contexts)
                 
             db.commit()
             logger.info(f"Background enrichment complete for paper: {paper.title}")

@@ -74,11 +74,15 @@ def get_graph_data(
         
         # Citation edges
         for ref in paper.references:
+            contexts = (paper.citation_contexts or {}).get(str(ref.id), [])
             edges.append({
                 "id": f"e_p{paper.id}_p{ref.id}",
                 "source": f"paper_{paper.id}",
                 "target": f"paper_{ref.id}",
-                "type": "citation"
+                "type": "citation",
+                "data": {
+                    "context": contexts
+                }
             })
             
         # Concept nodes and edges
