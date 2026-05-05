@@ -320,6 +320,8 @@ export const useStore = create<AppState>((set, get) => ({
       }
     });
 
+    const paperPositions: Record<string, { x: number; y: number }> = {};
+
     const updatedNodes = nodes.map((node) => {
       if (node.type === 'paper') {
         const pId = node.id.replace('paper_', '');
@@ -347,18 +349,25 @@ export const useStore = create<AppState>((set, get) => ({
           }
         };
 
-        return { ...node, position: calculatePosition() };
+        const pos = calculatePosition();
+        paperPositions[pId] = pos;
+        return { ...node, position: pos };
       } else if (node.type === 'concept') {
         const connectedPaperEdge = edges.find(e => e.target === node.id || e.source === node.id);
-        const paperNode = nodes.find(n => n.id === connectedPaperEdge?.source);
-        if (paperNode) {
-          return { 
-            ...node, 
-            position: { 
-              x: paperNode.position.x + (Math.random() - 0.5) * 200, 
-              y: paperNode.position.y - 200 
-            } 
-          };
+        if (connectedPaperEdge) {
+          const paperNodeId = connectedPaperEdge.source.startsWith('paper_') 
+            ? connectedPaperEdge.source.replace('paper_', '') 
+            : connectedPaperEdge.target.replace('paper_', '');
+          const paperPos = paperPositions[paperNodeId];
+          if (paperPos) {
+            return { 
+              ...node, 
+              position: { 
+                x: paperPos.x + (Math.random() - 0.5) * 200, 
+                y: paperPos.y - 200 
+              } 
+            };
+          }
         }
         return { ...node, position: { x: Math.random() * 2000, y: -500 } };
       }
