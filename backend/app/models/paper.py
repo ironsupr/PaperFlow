@@ -2,6 +2,7 @@ from typing import List
 from sqlalchemy import Column, Integer, String, ForeignKey, Text, JSON, Table
 from sqlalchemy.orm import relationship
 from app.db.session import Base
+from datetime import datetime
 
 # Association table for self-referential many-to-many relationship
 paper_references = Table(
@@ -49,6 +50,7 @@ class Paper(Base):
     title = Column(String, index=True)
     authors = Column(String)
     abstract = Column(Text)
+    created_at = Column(String, default=lambda: datetime.utcnow().isoformat())
     year = Column(Integer, nullable=True)
     domain = Column(String, nullable=True)
     topic = Column(String, nullable=True)

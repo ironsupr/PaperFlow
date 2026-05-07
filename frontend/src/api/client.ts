@@ -21,6 +21,13 @@ interface HighlightData {
   position: unknown;
 }
 
+interface UserData {
+  id: number;
+  email: string;
+  full_name?: string;
+  role?: string;
+}
+
 export const api = {
   uploadPaper: async (file: File) => {
     const formData = new FormData();
@@ -44,6 +51,14 @@ export const api = {
   },
   clearWorkspace: async () => {
     const response = await client.delete('/papers/clear/all');
+    return response.data;
+  },
+  getCurrentUser: async () => {
+    const response = await client.get<UserData>('/auth/me');
+    return response.data;
+  },
+  updateUser: async (updates: Partial<UserData>) => {
+    const response = await client.put<UserData>('/auth/me', updates);
     return response.data;
   },
   updateHighlights: async (id: number, highlights: HighlightData[]) => {

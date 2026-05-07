@@ -11,6 +11,7 @@ Base.metadata.create_all(bind=engine)
 # Quick Auto-migration for existing SQLite database
 def run_migrations():
     columns_to_add = [
+        ("created_at", "VARCHAR"),
         ("year", "INTEGER"),
         ("domain", "VARCHAR"),
         ("topic", "VARCHAR"),
@@ -27,6 +28,8 @@ def run_migrations():
                 if col_name not in existing_columns:
                     print(f"Migrating: Adding column {col_name} to papers table...")
                     conn.execute(text(f"ALTER TABLE papers ADD COLUMN {col_name} {col_type}"))
+            if "created_at" in existing_columns or any(col_name == "created_at" for col_name, _ in columns_to_add):
+                conn.execute(text("UPDATE papers SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP)"))
             conn.commit()
         except Exception as e:
             print(f"Migration warning: {e}")

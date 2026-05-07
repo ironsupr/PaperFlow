@@ -3,6 +3,7 @@ import shutil
 import re
 import logging
 import httpx
+from datetime import datetime
 from typing import List, Dict, Any
 from fastapi import UploadFile, BackgroundTasks
 import pdfplumber
@@ -218,7 +219,8 @@ class PaperService:
                             scholar_url=pub_data.get('url'),
                             user_id=paper.user_id,
                             is_external=1,
-                            year=pub_data.get('year')
+                            year=pub_data.get('year'),
+                            created_at=datetime.utcnow().isoformat()
                         )
                         db.add(existing)
                         db.flush()
@@ -359,7 +361,8 @@ class PaperService:
             user_id=user_id,
             is_external=0,
             sections=sections,
-            highlights=[]
+            highlights=[],
+            created_at=datetime.utcnow().isoformat()
         )
         
         norm_text = self.normalize_title(text)

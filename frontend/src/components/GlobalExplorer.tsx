@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   Search, 
   Plus, 
@@ -8,7 +8,8 @@ import {
   Calendar, 
   ExternalLink,
   CheckCircle2,
-  FileText
+  FileText,
+  AlertCircle
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { api } from '../api/client';
@@ -23,17 +24,45 @@ const GlobalExplorer = () => {
   } = useStore();
   
   const [query, setQuery] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cooldown countdown effect
+  useEffect(() => {
+    if (cooldownSeconds <= 0) return;
+    const timer = setTimeout(() => setCooldownSeconds(cooldownSeconds - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldownSeconds]);
 
   const handleSearch = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!query.trim()) return;
+    if (cooldownSeconds > 0) {
+      setError(`Please wait ${cooldownSeconds} seconds before searching again.`);
+      return;
+    }
     
+    setError(null);
     setExplorerState({ isExplorerLoading: true });
+    
+    // Clear any pending debounce
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
     try {
       const results = await api.exploreSearch(query);
       setExplorerState({ explorerResults: results });
-    } catch (error) {
-      console.error('Global search failed:', error);
+    } catch (error: any) {
+      const errorMsg = error?.response?.data?.detail || error?.message || 'Search failed. Please try again later.';
+      setError(errorMsg);
+      
+      // Extract cooldown seconds from error message if present
+      const cooldownMatch = errorMsg.match(/wait (\d+) seconds/);
+      if (cooldownMatch) {
+        setCooldownSeconds(parseInt(cooldownMatch[1]) + 1);
+      }
     } finally {
       setExplorerState({ isExplorerLoading: false });
     }
@@ -52,6 +81,8 @@ const GlobalExplorer = () => {
     return papers.some(p => p.title.toLowerCase() === title.toLowerCase());
   };
 
+  const isSearchDisabled = isExplorerLoading || cooldownSeconds > 0;
+
   return (
     <div className="h-full w-full flex flex-col bg-transparent overflow-hidden select-none">
       {/* Search Header */}
@@ -60,20 +91,35 @@ const GlobalExplorer = () => {
           <Globe size={14} className="text-primary" />
           <h2 className="text-xs font-semibold text-foreground/80 tracking-tight">Global Explorer</h2>
         </div>
-        <form onSubmit={handleSearch} className="relative">
-          <input 
-            type="text" 
-            placeholder="Search global research..."
-            className="w-full bg-accent/20 border border-border rounded py-2 pl-3 pr-10 text-[11px] mono focus:outline-none focus:border-primary/50 transition-all"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          <button 
-            type="submit"
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {isExplorerLoading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-          </button>
+        <form onSubmit={handleSearch} className="relative space-y-2">
+          <div className="relative">
+            <input 
+              type="text" 
+              placeholder="Search global research..."
+              className="w-full bg-accent/20 border border-border rounded py-2 pl-3 pr-10 text-[11px] mono focus:outline-none focus:border-primary/50 transition-all disabled:opacity-50"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              disabled={isSearchDisabled}
+            />
+            <button 
+              type="submit"
+              disabled={isSearchDisabled}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isExplorerLoading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+            </button>
+          </div>
+          {error && (
+            <div className="flex items-center gap-2 text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 rounded px-2 py-1.5">
+              <AlertCircle size={12} className="shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+          {cooldownSeconds > 0 && (
+            <div className="text-[10px] text-muted-foreground text-center">
+              Please wait {cooldownSeconds}s before next search
+            </div>
+          )}
         </form>
       </div>
 

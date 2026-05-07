@@ -5,6 +5,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from app.core import security
 from app.core.config import settings
+from app.api import deps
 from app.db.session import get_db
 from app.models.user import User as UserModel
 from app.schemas.user import User as UserSchema, UserCreate, Token
@@ -43,3 +44,24 @@ def login(db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = 
         ),
         "token_type": "bearer",
     }
+
+@router.get("/me", response_model=UserSchema)
+def read_current_user(
+    current_user: UserModel = Depends(deps.get_current_user)
+) -> Any:
+    return current_user
+
+@router.put("/me", response_model=UserSchema)
+def update_current_user(
+    user_in: UserSchema,
+    current_user: UserModel = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> Any:
+    if user_in.full_name:
+        current_user.full_name = user_in.full_name
+    if user_in.role:
+        current_user.role = user_in.role
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
+    return current_user

@@ -49,6 +49,7 @@ class PaperImport(BaseModel):
 
 class PaperInDBBase(PaperBase):
     id: int
+    created_at: Optional[str] = None
     upload_url: Optional[str] = None
     scholar_url: Optional[str] = None
     user_id: int

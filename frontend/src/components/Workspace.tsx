@@ -4,6 +4,10 @@ import GraphView from './GraphView';
 import RightPanel from './RightPanel';
 import LeftSidebar from './LeftSidebar';
 import GlobalExplorer from './GlobalExplorer';
+import PaperHistory from './PaperHistory';
+import AnalyticsPanel from './AnalyticsPanel';
+import ProfilePanel from './ProfilePanel';
+import SettingsPanel from './SettingsPanel';
 import PaperReader from './PaperReader';
 import FloatingReader from './FloatingReader';
 import { useStore } from '../store/useStore';
@@ -27,6 +31,7 @@ const Workspace = () => {
   const { 
     fetchPapers,
     fetchGraphData,
+    fetchCurrentUser,
     activeReaderId, 
     logout, 
     floatingReaderIds, 
@@ -43,7 +48,8 @@ const Workspace = () => {
   useEffect(() => {
     fetchPapers();
     fetchGraphData();
-  }, [fetchPapers, fetchGraphData]);
+    fetchCurrentUser();
+  }, [fetchPapers, fetchGraphData, fetchCurrentUser]);
 
   return (
     <div className="flex flex-col h-screen w-full bg-background overflow-hidden text-foreground font-sans selection:bg-primary/10 relative">
@@ -80,8 +86,32 @@ const Workspace = () => {
                 }
               }}
             />
-            <ActivityIcon icon={<Activity size={20} />} title="System Activity" />
-            <ActivityIcon icon={<Database size={20} />} title="Data Sources" />
+            <ActivityIcon 
+              icon={<Activity size={20} />} 
+              active={activeSidebarView === 'analytics' && leftSidebarVisible}
+              title="Workspace Analytics"
+              onClick={() => {
+                if (activeSidebarView === 'analytics') {
+                  setLeftSidebarVisible(!leftSidebarVisible);
+                } else {
+                  setActiveSidebarView('analytics');
+                  setLeftSidebarVisible(true);
+                }
+              }}
+            />
+            <ActivityIcon 
+              icon={<Database size={20} />} 
+              active={activeSidebarView === 'history' && leftSidebarVisible}
+              title="Paper History" 
+              onClick={() => {
+                if (activeSidebarView === 'history') {
+                  setLeftSidebarVisible(!leftSidebarVisible);
+                } else {
+                  setActiveSidebarView('history');
+                  setLeftSidebarVisible(true);
+                }
+              }}
+            />
           </div>
           <div className="flex flex-col items-center gap-2 w-full">
             <ActivityIcon 
@@ -90,8 +120,32 @@ const Workspace = () => {
               title="Intelligence Assistant"
               onClick={() => setRightSidebarVisible(!rightSidebarVisible)}
             />
-            <ActivityIcon icon={<User size={20} />} title="User Profile" />
-            <ActivityIcon icon={<Settings size={20} />} title="Settings" />
+            <ActivityIcon 
+              icon={<User size={20} />} 
+              active={activeSidebarView === 'profile' && leftSidebarVisible}
+              title="User Profile"
+              onClick={() => {
+                if (activeSidebarView === 'profile') {
+                  setLeftSidebarVisible(!leftSidebarVisible);
+                } else {
+                  setActiveSidebarView('profile');
+                  setLeftSidebarVisible(true);
+                }
+              }}
+            />
+            <ActivityIcon 
+              icon={<Settings size={20} />} 
+              active={activeSidebarView === 'settings' && leftSidebarVisible}
+              title="Settings"
+              onClick={() => {
+                if (activeSidebarView === 'settings') {
+                  setLeftSidebarVisible(!leftSidebarVisible);
+                } else {
+                  setActiveSidebarView('settings');
+                  setLeftSidebarVisible(true);
+                }
+              }}
+            />
             <button 
               onClick={() => logout()}
               title="Sign Out"
@@ -112,14 +166,14 @@ const Workspace = () => {
                   <div className="h-full flex flex-col">
                     <div className="h-9 px-4 flex items-center justify-between border-b border-border/50 bg-background/50">
                       <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                        {activeSidebarView === 'library' ? 'Explorer' : 'Global Search'}
+                        {activeSidebarView === 'library' ? 'Library' : activeSidebarView === 'explorer' ? 'Global Search' : activeSidebarView === 'history' ? 'Paper History' : activeSidebarView === 'analytics' ? 'Analytics' : activeSidebarView === 'profile' ? 'Profile' : 'Settings'}
                       </span>
                       <button onClick={() => setLeftSidebarVisible(false)} className="text-muted-foreground hover:text-foreground">
                         <ChevronLeft size={14} />
                       </button>
                     </div>
                     <div className="flex-1 overflow-hidden">
-                      {activeSidebarView === 'library' ? <LeftSidebar /> : <GlobalExplorer />}
+                      {activeSidebarView === 'library' ? <LeftSidebar /> : activeSidebarView === 'explorer' ? <GlobalExplorer /> : activeSidebarView === 'history' ? <PaperHistory /> : activeSidebarView === 'analytics' ? <AnalyticsPanel /> : activeSidebarView === 'profile' ? <ProfilePanel /> : <SettingsPanel />}
                     </div>
                   </div>
                 </ResizablePanels.Panel>

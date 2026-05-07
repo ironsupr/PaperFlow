@@ -2,6 +2,10 @@ import { create } from 'zustand';
 
 export type UserRole = 'student' | 'researcher' | 'reviewer';
 
+export interface AppPreferences {
+  openReaderOnSelect: boolean;
+}
+
 export interface User {
   id: number;
   username: string;
@@ -36,6 +40,7 @@ export interface Concept {
 
 export interface Paper {
   id: number;
+  created_at?: string;
   title: string;
   authors?: string;
   scholar_url?: string;
@@ -53,6 +58,8 @@ export interface Paper {
 interface AppState {
   user: User | null;
   token: string | null;
+  preferences: AppPreferences;
+  setPreferences: (preferences: Partial<AppPreferences>) => void;
   setUser: (user: User | null) => void;
   setToken: (token: string | null) => void;
   logout: () => void;
@@ -112,17 +119,23 @@ interface AppState {
   // UI Coordination State
   activeIntelligenceTab: 'intelligence' | 'citations' | 'discovery' | 'podcast' | 'critique';
   setActiveIntelligenceTab: (tab: 'intelligence' | 'citations' | 'discovery' | 'podcast' | 'critique') => void;
-  activeSidebarView: 'library' | 'explorer';
-  setActiveSidebarView: (view: 'library' | 'explorer') => void;
+  activeSidebarView: 'library' | 'explorer' | 'history' | 'analytics' | 'profile' | 'settings';
+  setActiveSidebarView: (view: 'library' | 'explorer' | 'history' | 'analytics' | 'profile' | 'settings') => void;
   leftSidebarVisible: boolean;
   setLeftSidebarVisible: (visible: boolean) => void;
   rightSidebarVisible: boolean;
   setRightSidebarVisible: (visible: boolean) => void;
 
+  // Paper History State
+  recentlyOpenedPaperIds: number[];
+  clearRecentlyOpenedPaperIds: () => void;
+
   // Explorer State
   explorerResults: any[];
   isExplorerLoading: boolean;
   setExplorerState: (data: Partial<AppState>) => void;
+
+  fetchCurrentUser: () => Promise<void>;
 
   setDiscoveryState: (data: Partial<AppState>) => void;
   setReviewerState: (data: Partial<AppState>) => void;
@@ -134,6 +147,19 @@ interface AppState {
 export const useStore = create<AppState>((set, get) => ({
   user: null,
   token: localStorage.getItem('token'),
+  preferences: (() => {
+    try {
+      const stored = localStorage.getItem('paperflow-preferences');
+      return stored ? { openReaderOnSelect: true, ...JSON.parse(stored) } : { openReaderOnSelect: true };
+    } catch {
+      return { openReaderOnSelect: true };
+    }
+  })(),
+  setPreferences: (preferences) => set((state) => {
+    const nextPreferences = { ...state.preferences, ...preferences };
+    localStorage.setItem('paperflow-preferences', JSON.stringify(nextPreferences));
+    return { preferences: nextPreferences };
+  }),
   setUser: (user) => set({ user }),
   setToken: (token) => {
     if (token) localStorage.setItem('token', token);
@@ -142,12 +168,11 @@ export const useStore = create<AppState>((set, get) => ({
   },
   logout: () => {
     localStorage.removeItem('token');
-    set({ user: null, token: null, papers: [], graphData: { nodes: [], edges: [] }, activeReaderId: null });
+    set({ user: null, token: null, papers: [], graphData: { nodes: [], edges: [] }, activeReaderId: null, recentlyOpenedPaperIds: [] });
   },
   role: 'student',
   setRole: (role) => set({ role }),
   selectedPaperId: null,
-  setSelectedPaperId: (id) => set({ selectedPaperId: id }),
   selectedMultiPaperIds: [],
   toggleMultiPaperSelection: (id) => {
     const current = get().selectedMultiPaperIds;
@@ -167,7 +192,23 @@ export const useStore = create<AppState>((set, get) => ({
   papers: [],
   setPapers: (papers) => set({ papers }),
   activeReaderId: null,
-  setActiveReaderId: (id) => set({ activeReaderId: id, rightSidebarVisible: id ? true : get().rightSidebarVisible }),
+  recentlyOpenedPaperIds: [],
+  clearRecentlyOpenedPaperIds: () => set({ recentlyOpenedPaperIds: [] }),
+  setSelectedPaperId: (id) => {
+    set({ selectedPaperId: id });
+    if (id !== null) {
+      const recent = get().recentlyOpenedPaperIds;
+      set({ recentlyOpenedPaperIds: [id, ...recent.filter((paperId) => paperId !== id)].slice(0, 20) });
+    }
+  },
+  setActiveReaderId: (id) => {
+    const shouldOpenReader = id ? get().preferences.openReaderOnSelect : get().rightSidebarVisible;
+    set({ activeReaderId: id, rightSidebarVisible: id ? shouldOpenReader : get().rightSidebarVisible });
+    if (id !== null) {
+      const recent = get().recentlyOpenedPaperIds;
+      set({ recentlyOpenedPaperIds: [id, ...recent.filter((paperId) => paperId !== id)].slice(0, 20) });
+    }
+  },
 
   crossPaperAnalysis: null,
   setCrossPaperAnalysis: (analysis) => set({ crossPaperAnalysis: analysis }),
@@ -212,6 +253,24 @@ export const useStore = create<AppState>((set, get) => ({
   isExplorerLoading: false,
   setExplorerState: (data) => set((state) => ({ ...state, ...data })),
 
+  fetchCurrentUser: async () => {
+    const { token } = get();
+    if (!token) return;
+    try {
+      const response = await fetch('http://localhost:8000/auth/me', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) get().logout();
+        return;
+      }
+      const data = await response.json();
+      set({ user: data });
+    } catch (error) {
+      console.error('Failed to fetch current user:', error);
+    }
+  },
+
   floatingReaderIds: [],
   maximizedReaderId: null,
   addFloatingReader: (id) => {
@@ -253,7 +312,9 @@ export const useStore = create<AppState>((set, get) => ({
       leftSidebarVisible: true,
       rightSidebarVisible: true,
       activeSidebarView: 'library',
-      explorerResults: []
+      recentlyOpenedPaperIds: [],
+      explorerResults: [],
+      preferences: { openReaderOnSelect: true }
     });
   },
 
