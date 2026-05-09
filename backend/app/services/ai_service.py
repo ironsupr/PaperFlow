@@ -274,33 +274,108 @@ class AIService:
         except Exception as e:
             return f"Analysis Error: {str(e)}"
 
+    def _generate_template_script(self, papers_data: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+        """Build a two-host podcast script from paper data without requiring an LLM."""
+        script = []
+        if not papers_data:
+            return script
+
+        if len(papers_data) == 1:
+            paper = papers_data[0]
+            title = paper.get("title", "this research paper")
+            abstract = paper.get("abstract", "").strip()
+
+            script.append({"speaker": "Alex", "text": f"Welcome to Research Radio! I'm Alex."})
+            script.append({"speaker": "Jamie", "text": f"And I'm Jamie. Today we're breaking down a paper called '{title}'. Alex, set the scene for us."})
+
+            if abstract:
+                sentences = [s.strip() for s in abstract.replace("\n", " ").split(".") if s.strip()]
+                total = len(sentences)
+                third = max(1, total // 3)
+
+                intro = ". ".join(sentences[:third]) + "."
+                middle = ". ".join(sentences[third:2*third]) + "." if total > third else ""
+                closing = ". ".join(sentences[2*third:]) + "." if total > 2*third else ""
+
+                script.append({"speaker": "Alex", "text": f"Sure! At its core, {intro}"})
+                script.append({"speaker": "Jamie", "text": "That's a great starting point. What do the researchers actually do to tackle this?"})
+                if middle:
+                    script.append({"speaker": "Alex", "text": middle})
+                    script.append({"speaker": "Jamie", "text": "Interesting approach. And what did they find?"})
+                if closing:
+                    script.append({"speaker": "Alex", "text": closing})
+                else:
+                    script.append({"speaker": "Alex", "text": "Their findings offer meaningful contributions to the field."})
+            else:
+                script.append({"speaker": "Alex", "text": f"This paper explores cutting-edge research. While we don't have the full abstract, the title alone tells us this covers important ground."})
+
+            script.append({"speaker": "Jamie", "text": "Fascinating! What are the broader implications here, Alex?"})
+            script.append({"speaker": "Alex", "text": "This kind of work really opens doors for future research and practical applications. The field will be watching closely."})
+            script.append({"speaker": "Jamie", "text": "Absolutely. Thanks for breaking that down, Alex — and thank you all for listening to Research Radio!"})
+            script.append({"speaker": "Alex", "text": "See you next time!"})
+        else:
+            titles = [p.get("title", f"Paper {i+1}") for i, p in enumerate(papers_data)]
+            script.append({"speaker": "Alex", "text": f"Welcome to Research Radio! I'm Alex, and today we're covering {len(papers_data)} papers."})
+            script.append({"speaker": "Jamie", "text": f"I'm Jamie. This is going to be a packed episode — let's get into it!"})
+
+            for i, paper in enumerate(papers_data):
+                spk_a = "Alex" if i % 2 == 0 else "Jamie"
+                spk_b = "Jamie" if i % 2 == 0 else "Alex"
+                title = paper.get("title", f"Paper {i+1}")
+                abstract = paper.get("abstract", "").strip()
+
+                script.append({"speaker": spk_a, "text": f"Paper {i+1} is titled '{title}'."})
+                if abstract:
+                    summary = abstract[:350].rsplit(" ", 1)[0] + "..." if len(abstract) > 350 else abstract
+                    script.append({"speaker": spk_b, "text": f"Here's the gist: {summary}"})
+                else:
+                    script.append({"speaker": spk_b, "text": "This one covers some exciting ground in its domain."})
+
+            script.append({"speaker": "Alex", "text": "What a corpus! All these papers together really push the boundaries of what we know."})
+            script.append({"speaker": "Jamie", "text": "Couldn't agree more. Thanks for tuning in to Research Radio, everyone!"})
+
+        return script
+
     async def generate_podcast_script(self, papers_data: List[Dict[str, Any]], tone: str = "casual") -> List[Dict[str, str]]:
         if not self.llm:
-            return []
-        
+            print("Gemini not configured — using template podcast script.")
+            return self._generate_template_script(papers_data)
+
         context = ""
         for p in papers_data:
             context += f"PAPER: {p['title']}\nSUMMARY: {p['abstract'][:2000]}\n\n"
 
-        prompt = f"""You are a podcast script writer for 'Research Radio'. 
+        prompt = f"""You are a podcast script writer for 'Research Radio'.
         Generate a conversational dialogue between two hosts, 'Alex' and 'Jamie', discussing the following research.
-        Tone: {tone}. 
-        Format: A JSON list of objects: [{"speaker": "Alex", "text": "..."}]
-        The conversation should be engaging, explaining complex ideas simply but accurately.
-        
+        Tone: {tone}.
+        Format your entire response as a JSON array only, with no extra text:
+        [{{"speaker": "Alex", "text": "..."}}, {{"speaker": "Jamie", "text": "..."}}]
+        The conversation should be engaging, explaining complex ideas simply but accurately. Aim for 10-16 exchanges.
+
         RESEARCH DATA:
         {context}
         """
-        
+
         try:
             response = await self.llm.generate_content_async(prompt)
-            content = response.text
+            content = response.text.strip()
+            # Strip markdown code fences if present
             if "```json" in content:
                 content = content.split("```json")[1].split("```")[0].strip()
-            return json.loads(content)
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
+            # Find the JSON array in the response
+            start = content.find("[")
+            end = content.rfind("]") + 1
+            if start != -1 and end > start:
+                content = content[start:end]
+            result = json.loads(content)
+            if isinstance(result, list) and len(result) > 0:
+                return result
+            return self._generate_template_script(papers_data)
         except Exception as e:
-            print(f"Podcast Script Error: {e}")
-            return []
+            print(f"Podcast Script Error: {e} — falling back to template.")
+            return self._generate_template_script(papers_data)
 
     async def detect_research_gaps(self, papers_data: List[Dict[str, Any]]) -> str:
         if not self.llm:

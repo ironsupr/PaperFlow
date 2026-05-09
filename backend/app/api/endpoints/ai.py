@@ -1,5 +1,5 @@
 from typing import Any, List, Optional, Dict
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException
 from app.api import deps
 from app.services.ai_service import ai_service
 from app.services.paper_service import paper_service
@@ -7,7 +7,8 @@ from app.models.paper import Paper as PaperModel
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import os
-import asyncio
+import time
+import tempfile
 import edge_tts
 
 router = APIRouter()
@@ -250,46 +251,76 @@ async def generate_structured_review(
     review = await ai_service.generate_structured_review(papers_data)
     return {"review": review}
 
+VOICE_MAP = {
+    "Alex": "en-US-AndrewNeural",
+    "Jamie": "en-US-AriaNeural",
+}
+DEFAULT_VOICE = "en-US-AndrewNeural"
+
 @router.post("/podcast")
 async def generate_podcast(
     *,
     request: PodcastRequest,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(deps.get_db),
     current_user: Any = Depends(deps.get_current_user)
 ) -> Any:
     papers = db.query(PaperModel).filter(
-        PaperModel.id.in_(request.paper_ids), 
+        PaperModel.id.in_(request.paper_ids),
         PaperModel.user_id == current_user.id
     ).all()
-    
-    papers_data = [{"title": p.title, "abstract": p.abstract} for p in papers]
+
+    if not papers:
+        raise HTTPException(status_code=404, detail="No papers found for the given IDs")
+
+    papers_data = [{"title": p.title, "abstract": p.abstract or ""} for p in papers]
     script = await ai_service.generate_podcast_script(papers_data, request.tone)
-    
+
     if not script:
         raise HTTPException(status_code=500, detail="Failed to generate podcast script")
-    
-    podcast_id = f"podcast_{current_user.id}_{int(asyncio.get_event_loop().time())}"
+
+    podcast_id = f"podcast_{current_user.id}_{int(time.time())}"
     output_path = os.path.join(AUDIO_DIR, f"{podcast_id}.mp3")
-    
-    background_tasks.add_task(synthesize_podcast, script, output_path)
-    
+
+    try:
+        await synthesize_podcast(script, output_path)
+    except Exception as e:
+        print(f"TTS synthesis failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Audio synthesis failed: {str(e)}")
+
     return {
         "podcast_id": podcast_id,
         "script": script,
         "audio_url": f"/static/audio/{podcast_id}.mp3",
-        "status": "processing"
+        "status": "ready"
     }
 
 async def synthesize_podcast(script: List[dict], output_path: str):
-    combined_script = ""
-    for line in script:
-        speaker = line.get("speaker", "Alex")
-        text = line.get("text", "")
-        combined_script += f"{speaker}: {text}\n\n"
+    """Generate MP3 with two distinct voices — Alex (male) and Jamie (female)."""
+    temp_files: List[str] = []
+    try:
+        for line in script:
+            text = line.get("text", "").strip()
+            if not text:
+                continue
+            speaker = line.get("speaker", "Alex")
+            voice = VOICE_MAP.get(speaker, DEFAULT_VOICE)
+            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tf:
+                temp_path = tf.name
+            communicate = edge_tts.Communicate(text, voice)
+            await communicate.save(temp_path)
+            temp_files.append(temp_path)
 
-    communicate = edge_tts.Communicate(combined_script, "en-US-AndrewNeural")
-    await communicate.save(output_path)
+        # Concatenate MP3 frames — works because MP3 is a frame-based stream format
+        with open(output_path, "wb") as out:
+            for temp_path in temp_files:
+                with open(temp_path, "rb") as f:
+                    out.write(f.read())
+    finally:
+        for temp_path in temp_files:
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
 
 @router.get("/definitions")
 async def get_definitions(

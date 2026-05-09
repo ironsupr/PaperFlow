@@ -79,12 +79,15 @@ const LeftSidebar = () => {
   };
 
   const handleGeneratePodcast = async () => {
-    if (selectedMultiPaperIds.length === 0) return alert("Select papers for podcast.");
+    const targetIds = selectedMultiPaperIds.length > 0
+      ? selectedMultiPaperIds
+      : activeReaderId ? [activeReaderId] : [];
+    if (targetIds.length === 0) return alert("Open or select a paper first.");
     setActiveIntelligenceTab('podcast');
     setPodcastData({ status: 'processing', url: null, script: null });
     try {
-      const res = await api.generatePodcast(selectedMultiPaperIds);
-      setPodcastData({ status: 'processing', url: res.audio_url, script: res.script });
+      const res = await api.generatePodcast(targetIds);
+      setPodcastData({ status: res.status || 'ready', url: res.audio_url, script: res.script });
     } catch (error) {
       console.error('Podcast generation failed:', error);
       setPodcastData({ status: 'error', url: null, script: null });
@@ -189,7 +192,7 @@ const LeftSidebar = () => {
         
         <div className="flex gap-1">
           {role === 'student' && (
-            <button onClick={handleGeneratePodcast} disabled={selectedMultiPaperIds.length === 0} className="w-full flex items-center justify-center gap-2 py-2 rounded bg-primary/10 text-primary border border-primary/20 text-[10px] font-bold uppercase hover:bg-primary/20 disabled:opacity-30 transition-all">
+            <button onClick={handleGeneratePodcast} disabled={selectedMultiPaperIds.length === 0 && !activeReaderId} className="w-full flex items-center justify-center gap-2 py-2 rounded bg-primary/10 text-primary border border-primary/20 text-[10px] font-bold uppercase hover:bg-primary/20 disabled:opacity-30 transition-all">
               <Mic2 size={14} /> Generate Podcast
             </button>
           )}

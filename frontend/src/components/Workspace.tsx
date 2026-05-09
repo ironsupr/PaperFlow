@@ -28,13 +28,12 @@ import {
 } from 'lucide-react';
 
 const Workspace = () => {
-  const { 
+  const {
     fetchPapers,
     fetchGraphData,
     fetchCurrentUser,
-    activeReaderId, 
-    logout, 
-    floatingReaderIds, 
+    logout,
+    floatingReaderIds,
     removeFloatingReader,
     maximizedReaderId,
     leftSidebarVisible,
@@ -181,34 +180,16 @@ const Workspace = () => {
               </>
             )}
 
-            {/* Center Area - Editor/Graph */}
+            {/* Center Area - Graph */}
             <ResizablePanels.Panel defaultSize={rightSidebarVisible ? 55 : 80} minSize={30}>
               <div className="h-full flex flex-col bg-background">
                 {/* Tab Bar */}
                 <div className="h-9 bg-card/20 border-b border-border flex items-center overflow-hidden">
-                  <Tab label="Network Graph" active={!activeReaderId} />
-                  {activeReaderId && <Tab label="Document Reader" active={true} closable />}
+                  <Tab label="Network Graph" active />
                 </div>
 
                 <div className="flex-1 relative overflow-hidden">
-                  <ResizablePanels.PanelGroup direction="horizontal">
-                    <ResizablePanels.Panel defaultSize={activeReaderId ? 50 : 100} minSize={20}>
-                      <div className="h-full w-full relative">
-                        <GraphView />
-                      </div>
-                    </ResizablePanels.Panel>
-                    
-                    {activeReaderId && (
-                      <>
-                        <ResizablePanels.PanelResizeHandle className="resize-handle" />
-                        <ResizablePanels.Panel defaultSize={50} minSize={20}>
-                          <div className="h-full w-full bg-background border-l border-border/50">
-                            <PaperReader />
-                          </div>
-                        </ResizablePanels.Panel>
-                      </>
-                    )}
-                  </ResizablePanels.PanelGroup>
+                  <GraphView />
                 </div>
               </div>
             </ResizablePanels.Panel>

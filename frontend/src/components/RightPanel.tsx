@@ -30,7 +30,7 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { api } from '../api/client';
+import { api, API_BASE_URL } from '../api/client';
 
 const RightPanel = () => {
   const { 
@@ -464,22 +464,73 @@ const RightPanel = () => {
             <motion.div key="podcast" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 space-y-8">
               <Section title="Podcast Learning Mode" icon={<Mic2 size={14} />}>
                 <div className="bg-accent/10 border border-border rounded-xl p-6 flex flex-col items-center text-center space-y-6">
-                  <div className="w-16 h-16 bg-foreground rounded-full flex items-center justify-center text-background shadow-2xl"><Volume2 size={32} /></div>
-                  {podcastAudioUrl && (
+
+                  {/* Idle — no podcast yet */}
+                  {podcastStatus === 'idle' && (
                     <>
-                      <audio ref={audioRef} src={`http://localhost:8000${podcastAudioUrl}`} onEnded={() => setIsPlaying(false)} />
-                      <div className="flex items-center gap-4">
-                        <button onClick={togglePlayback} className="w-12 h-12 bg-foreground text-background rounded-full flex items-center justify-center hover:scale-105 transition-all">{isPlaying ? <Pause size={24} /> : <Play size={24} className="ml-1" />}</button>
+                      <div className="w-16 h-16 bg-foreground/10 border border-border rounded-full flex items-center justify-center text-muted-foreground"><Volume2 size={28} /></div>
+                      <div className="space-y-1">
+                        <p className="text-[11px] font-semibold text-foreground/80">No podcast generated yet</p>
+                        <p className="text-[10px] text-muted-foreground mono">Select a paper and click <span className="text-foreground">Generate Podcast</span> in the sidebar</p>
                       </div>
                     </>
                   )}
-                  {podcastStatus === 'processing' && <Loader2 className="animate-spin text-muted-foreground" size={24} />}
+
+                  {/* Processing — spinner + progress hint */}
+                  {podcastStatus === 'processing' && (
+                    <>
+                      <div className="w-16 h-16 bg-foreground rounded-full flex items-center justify-center text-background shadow-2xl animate-pulse"><Volume2 size={32} /></div>
+                      <div className="space-y-2">
+                        <Loader2 className="animate-spin text-muted-foreground mx-auto" size={22} />
+                        <p className="text-[10px] mono text-muted-foreground">Generating script &amp; synthesising audio…</p>
+                      </div>
+                      {/* Show script preview while waiting */}
+                      {podcastScript && podcastScript.length > 0 && (
+                        <p className="text-[10px] text-muted-foreground italic">Script ready — encoding audio…</p>
+                      )}
+                    </>
+                  )}
+
+                  {/* Error */}
+                  {podcastStatus === 'error' && (
+                    <>
+                      <div className="w-16 h-16 bg-red-500/10 border border-red-500/30 rounded-full flex items-center justify-center text-red-400"><Volume2 size={28} /></div>
+                      <div className="space-y-1">
+                        <p className="text-[11px] font-semibold text-red-400">Generation failed</p>
+                        <p className="text-[10px] text-muted-foreground mono">Check the server logs and try again</p>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Ready — player */}
+                  {podcastStatus === 'ready' && podcastAudioUrl && (
+                    <>
+                      <div className="w-16 h-16 bg-foreground rounded-full flex items-center justify-center text-background shadow-2xl"><Volume2 size={32} /></div>
+                      <audio ref={audioRef} src={`${API_BASE_URL}${podcastAudioUrl}`} onEnded={() => setIsPlaying(false)} />
+                      <div className="flex items-center gap-4">
+                        <button
+                          onClick={togglePlayback}
+                          className="w-14 h-14 bg-foreground text-background rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-lg"
+                        >
+                          {isPlaying ? <Pause size={26} /> : <Play size={26} className="ml-1" />}
+                        </button>
+                      </div>
+                      <p className="text-[9px] mono text-muted-foreground uppercase tracking-widest">Research Radio · Alex &amp; Jamie</p>
+                    </>
+                  )}
                 </div>
               </Section>
-              {podcastScript && (
-                <Section title="Live Script" icon={<Terminal size={12} />}>
-                  <div className="space-y-4 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
-                    {podcastScript.map((line, i) => <div key={i} className={`p-3 rounded border border-border/30 ${line.speaker === 'Alex' ? 'bg-card/30' : 'bg-accent/5'}`}><span className="text-[9px] mono font-bold text-muted-foreground uppercase block mb-1">{line.speaker}</span><p className="text-[11px] leading-relaxed text-foreground/90">{line.text}</p></div>)}
+
+              {/* Script — show for processing (preview) and ready */}
+              {podcastScript && podcastScript.length > 0 && (podcastStatus === 'ready' || podcastStatus === 'processing') && (
+                <Section title="Transcript" icon={<Terminal size={12} />}>
+                  <div className="space-y-2 max-h-[320px] overflow-y-auto custom-scrollbar pr-1">
+                    {podcastScript.map((line, i) => (
+                      <div key={i} className={`p-3 rounded-lg border border-border/30 ${line.speaker === 'Alex' ? 'bg-card/30' : 'bg-accent/5'}`}>
+                        <span className={`text-[9px] mono font-bold uppercase tracking-widest block mb-1 ${line.speaker === 'Alex' ? 'text-primary/70' : 'text-muted-foreground'}`}>{line.speaker}</span>
+                        <p className="text-[11px] leading-relaxed text-foreground/90">{line.text}</p>
+                      </div>
+                    ))}
                   </div>
                 </Section>
               )}

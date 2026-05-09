@@ -1,9 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from app.db.session import engine, Base
 from app.models import user, paper, graph_review
 from sqlalchemy import text
 from app.api.endpoints import auth, papers, ai, explore
+import os
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -37,6 +39,9 @@ def run_migrations():
 run_migrations()
 
 app = FastAPI(title="PaperFlow AI API")
+
+os.makedirs("static/audio", exist_ok=True)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.on_event("startup")
 async def startup_event():
