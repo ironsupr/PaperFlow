@@ -9,7 +9,20 @@ from sqlalchemy.orm import Session
 import os
 import time
 import tempfile
-import edge_tts
+import wave
+
+try:
+    from google import genai as _gemini_sdk
+    from google.genai import types as _gemini_types
+    _GEMINI_TTS_AVAILABLE = True
+except ImportError:
+    _GEMINI_TTS_AVAILABLE = False
+
+try:
+    import edge_tts as _edge_tts
+    _EDGE_TTS_AVAILABLE = True
+except ImportError:
+    _EDGE_TTS_AVAILABLE = False
 
 router = APIRouter()
 
@@ -251,11 +264,16 @@ async def generate_structured_review(
     review = await ai_service.generate_structured_review(papers_data)
     return {"review": review}
 
-VOICE_MAP = {
+_EDGE_VOICE_MAP = {
     "Alex": "en-US-AndrewNeural",
     "Jamie": "en-US-AriaNeural",
 }
-DEFAULT_VOICE = "en-US-AndrewNeural"
+_EDGE_DEFAULT_VOICE = "en-US-AndrewNeural"
+
+_GEMINI_VOICE_MAP = {
+    "Alex": "Charon",
+    "Jamie": "Kore",
+}
 
 @router.post("/podcast")
 async def generate_podcast(
@@ -279,10 +297,20 @@ async def generate_podcast(
         raise HTTPException(status_code=500, detail="Failed to generate podcast script")
 
     podcast_id = f"podcast_{current_user.id}_{int(time.time())}"
-    output_path = os.path.join(AUDIO_DIR, f"{podcast_id}.mp3")
+
+    gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    use_gemini = _GEMINI_TTS_AVAILABLE and bool(gemini_key)
+
+    ext = "wav" if use_gemini else "mp3"
+    output_path = os.path.join(AUDIO_DIR, f"{podcast_id}.{ext}")
 
     try:
-        await synthesize_podcast(script, output_path)
+        if use_gemini:
+            await _synthesize_gemini(script, output_path, gemini_key)
+        elif _EDGE_TTS_AVAILABLE:
+            await _synthesize_edge(script, output_path)
+        else:
+            raise RuntimeError("No TTS engine available. Set GEMINI_API_KEY or install edge-tts.")
     except Exception as e:
         print(f"TTS synthesis failed: {e}")
         raise HTTPException(status_code=500, detail=f"Audio synthesis failed: {str(e)}")
@@ -290,12 +318,71 @@ async def generate_podcast(
     return {
         "podcast_id": podcast_id,
         "script": script,
-        "audio_url": f"/static/audio/{podcast_id}.mp3",
+        "audio_url": f"/static/audio/{podcast_id}.{ext}",
         "status": "ready"
     }
 
-async def synthesize_podcast(script: List[dict], output_path: str):
-    """Generate MP3 with two distinct voices — Alex (male) and Jamie (female)."""
+
+def _pcm_to_wav(pcm_data: bytes, output_path: str, sample_rate: int = 24000):
+    """Write raw 16-bit mono PCM bytes to a WAV file."""
+    with wave.open(output_path, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(pcm_data)
+
+
+async def _synthesize_gemini(script: List[dict], output_path: str, api_key: str):
+    """Generate WAV using Gemini 2.5 Flash TTS with multi-speaker voices."""
+    client = _gemini_sdk.Client(api_key=api_key)
+
+    speaker_voice_configs = [
+        _gemini_types.SpeakerVoiceConfig(
+            speaker="Alex",
+            voice_config=_gemini_types.VoiceConfig(
+                prebuilt_voice_config=_gemini_types.PrebuiltVoiceConfig(voice_name="Charon")
+            )
+        ),
+        _gemini_types.SpeakerVoiceConfig(
+            speaker="Jamie",
+            voice_config=_gemini_types.VoiceConfig(
+                prebuilt_voice_config=_gemini_types.PrebuiltVoiceConfig(voice_name="Kore")
+            )
+        ),
+    ]
+
+    script_text = "\n".join(
+        f"{line.get('speaker', 'Alex')}: {line.get('text', '').strip()}"
+        for line in script
+        if line.get("text", "").strip()
+    )
+
+    response = await client.aio.models.generate_content(
+        model="gemini-2.5-flash-preview-tts",
+        contents=script_text,
+        config=_gemini_types.GenerateContentConfig(
+            response_modalities=["AUDIO"],
+            speech_config=_gemini_types.SpeechConfig(
+                multi_speaker_voice_config=_gemini_types.MultiSpeakerVoiceConfig(
+                    speaker_voice_configs=speaker_voice_configs
+                )
+            )
+        )
+    )
+
+    pcm_bytes = b""
+    for part in response.candidates[0].content.parts:
+        if part.inline_data and part.inline_data.data:
+            pcm_bytes += part.inline_data.data
+
+    if not pcm_bytes:
+        raise RuntimeError("Gemini TTS returned no audio data")
+
+    _pcm_to_wav(pcm_bytes, output_path)
+
+
+async def _synthesize_edge(script: List[dict], output_path: str):
+    """Generate MP3 using edge-tts (fallback) with two distinct voices."""
     temp_files: List[str] = []
     try:
         for line in script:
@@ -303,14 +390,13 @@ async def synthesize_podcast(script: List[dict], output_path: str):
             if not text:
                 continue
             speaker = line.get("speaker", "Alex")
-            voice = VOICE_MAP.get(speaker, DEFAULT_VOICE)
+            voice = _EDGE_VOICE_MAP.get(speaker, _EDGE_DEFAULT_VOICE)
             with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tf:
                 temp_path = tf.name
-            communicate = edge_tts.Communicate(text, voice)
+            communicate = _edge_tts.Communicate(text, voice)
             await communicate.save(temp_path)
             temp_files.append(temp_path)
 
-        # Concatenate MP3 frames — works because MP3 is a frame-based stream format
         with open(output_path, "wb") as out:
             for temp_path in temp_files:
                 with open(temp_path, "rb") as f:

@@ -14,6 +14,7 @@ pydantic[email]
 pydantic-settings
 pdfplumber
 google-generativeai
+google-genai
 grobid-client-python
 scholarly
 edge-tts
