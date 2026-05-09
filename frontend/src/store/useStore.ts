@@ -101,13 +101,15 @@ interface AppState {
   discoveryMethods: string | null;
   discoveryFlaws: string | null;
   isDiscoveryLoading: boolean;
-  
+  discoveryError: string | null;
+
   // Reviewer Mode State
   reviewerScores: { clarity: number, novelty: number, validity: number, impact: number, overall: number } | null;
   reviewerClaims: Array<{ claim: string, status: 'supported' | 'unsupported' | 'partial', context: string }> | null;
   reviewerBias: string | null;
   reviewerReport: string | null;
   isReviewerLoading: boolean;
+  reviewerError: string | null;
 
   // Multi-Modal Reading State
   floatingReaderIds: number[];
@@ -230,6 +232,7 @@ export const useStore = create<AppState>((set, get) => ({
   discoveryMethods: null,
   discoveryFlaws: null,
   isDiscoveryLoading: false,
+  discoveryError: null,
 
   // Reviewer Mode Initial State
   reviewerScores: null,
@@ -237,6 +240,7 @@ export const useStore = create<AppState>((set, get) => ({
   reviewerBias: null,
   reviewerReport: null,
   isReviewerLoading: false,
+  reviewerError: null,
 
   // UI State
   activeIntelligenceTab: 'intelligence',
@@ -302,10 +306,12 @@ export const useStore = create<AppState>((set, get) => ({
       discoveryTrends: null,
       discoveryIdeas: null,
       discoveryMethods: null,
+      discoveryError: null,
       reviewerScores: null,
       reviewerClaims: null,
       reviewerBias: null,
       reviewerReport: null,
+      reviewerError: null,
       activeIntelligenceTab: 'intelligence',
       floatingReaderIds: [],
       maximizedReaderId: null,

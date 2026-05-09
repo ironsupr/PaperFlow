@@ -109,8 +109,8 @@ const LeftSidebar = () => {
       return;
     }
 
-    setActiveIntelligenceTab('discovery');
-    setDiscoveryState({ isDiscoveryLoading: true });
+    setActiveIntelligenceTab(tool === 'flaws' ? 'critique' : 'discovery');
+    setDiscoveryState({ isDiscoveryLoading: true, discoveryError: null });
     try {
       let res;
       switch(tool) {
@@ -132,12 +132,13 @@ const LeftSidebar = () => {
           setDiscoveryState({ discoveryMethods: res.comparison });
           break;
         case 'flaws':
-          setActiveIntelligenceTab('critique');
           res = await api.detectFlaws(targetIds);
           setDiscoveryState({ discoveryFlaws: res.flaws });
           break;
       }
-    } catch (error) {
+    } catch (error: any) {
+      const msg = error?.response?.data?.detail || 'Analysis failed. Please try again.';
+      setDiscoveryState({ discoveryError: msg });
       console.error(`Discovery tool ${tool} failed:`, error);
     } finally {
       setDiscoveryState({ isDiscoveryLoading: false });

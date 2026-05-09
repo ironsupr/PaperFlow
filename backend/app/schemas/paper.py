@@ -19,6 +19,10 @@ class NoteBase(BaseModel):
 class NoteCreate(NoteBase):
     pass
 
+class NoteUpdate(BaseModel):
+    content: Optional[str] = None
+    tags: Optional[List[str]] = None
+
 class Note(NoteBase):
     id: int
     user_id: int

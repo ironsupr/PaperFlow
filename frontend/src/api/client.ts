@@ -105,6 +105,13 @@ export const api = {
     const response = await client.get(`/papers/${paperId}/notes`);
     return response.data;
   },
+  updateNote: async (paperId: number, noteId: number, updates: { content?: string, tags?: string[] }) => {
+    const response = await client.put(`/papers/${paperId}/notes/${noteId}`, updates);
+    return response.data;
+  },
+  deleteNote: async (paperId: number, noteId: number) => {
+    await client.delete(`/papers/${paperId}/notes/${noteId}`);
+  },
   // Researcher Mode
   detectResearchGaps: async (paperIds: number[]) => {
     const response = await client.post('/ai/research-gaps', { paper_ids: paperIds });

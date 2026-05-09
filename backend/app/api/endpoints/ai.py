@@ -122,6 +122,8 @@ async def cross_paper_analysis(
     return {"analysis": analysis}
 
 # Researcher Mode Endpoints
+_AI_UNAVAILABLE = HTTPException(status_code=503, detail="AI features require GEMINI_API_KEY to be configured.")
+
 @router.post("/research-gaps")
 async def detect_research_gaps(
     *,
@@ -129,6 +131,8 @@ async def detect_research_gaps(
     db: Session = Depends(deps.get_db),
     current_user: Any = Depends(deps.get_current_user)
 ) -> Any:
+    if not ai_service.llm:
+        raise _AI_UNAVAILABLE
     papers = db.query(PaperModel).filter(
         PaperModel.id.in_(request.paper_ids), 
         PaperModel.user_id == current_user.id
@@ -145,6 +149,8 @@ async def novelty_check(
     db: Session = Depends(deps.get_db),
     current_user: Any = Depends(deps.get_current_user)
 ) -> Any:
+    if not ai_service.llm:
+        raise _AI_UNAVAILABLE
     # Use FAISS to find similar chunks globally or in selected subset
     similar_chunks = await ai_service.search_similar(request.idea, paper_ids=request.paper_ids, top_k=10)
     result = await ai_service.check_novelty_critique(request.idea, similar_chunks)
@@ -157,6 +163,8 @@ async def trend_analysis(
     db: Session = Depends(deps.get_db),
     current_user: Any = Depends(deps.get_current_user)
 ) -> Any:
+    if not ai_service.llm:
+        raise _AI_UNAVAILABLE
     papers = db.query(PaperModel).filter(
         PaperModel.id.in_(request.paper_ids), 
         PaperModel.user_id == current_user.id
@@ -173,6 +181,8 @@ async def generate_ideas(
     db: Session = Depends(deps.get_db),
     current_user: Any = Depends(deps.get_current_user)
 ) -> Any:
+    if not ai_service.llm:
+        raise _AI_UNAVAILABLE
     papers = db.query(PaperModel).filter(
         PaperModel.id.in_(request.paper_ids), 
         PaperModel.user_id == current_user.id
@@ -189,6 +199,8 @@ async def method_compare(
     db: Session = Depends(deps.get_db),
     current_user: Any = Depends(deps.get_current_user)
 ) -> Any:
+    if not ai_service.llm:
+        raise _AI_UNAVAILABLE
     papers = db.query(PaperModel).filter(
         PaperModel.id.in_(request.paper_ids), 
         PaperModel.user_id == current_user.id
@@ -205,6 +217,8 @@ async def detect_flaws(
     db: Session = Depends(deps.get_db),
     current_user: Any = Depends(deps.get_current_user)
 ) -> Any:
+    if not ai_service.llm:
+        raise _AI_UNAVAILABLE
     papers = db.query(PaperModel).filter(
         PaperModel.id.in_(request.paper_ids), 
         PaperModel.user_id == current_user.id
@@ -223,6 +237,8 @@ async def get_reviewer_scores(
     db: Session = Depends(deps.get_db),
     current_user: Any = Depends(deps.get_current_user)
 ) -> Any:
+    if not ai_service.llm:
+        raise _AI_UNAVAILABLE
     papers = db.query(PaperModel).filter(PaperModel.id.in_(request.paper_ids), PaperModel.user_id == current_user.id).all()
     papers_data = [{"title": p.title, "abstract": p.abstract} for p in papers]
     scores = await ai_service.generate_reviewer_scores(papers_data)
@@ -235,6 +251,8 @@ async def verify_claims(
     db: Session = Depends(deps.get_db),
     current_user: Any = Depends(deps.get_current_user)
 ) -> Any:
+    if not ai_service.llm:
+        raise _AI_UNAVAILABLE
     papers = db.query(PaperModel).filter(PaperModel.id.in_(request.paper_ids), PaperModel.user_id == current_user.id).all()
     papers_data = [{"title": p.title, "abstract": p.abstract} for p in papers]
     claims = await ai_service.verify_claims(papers_data)
@@ -247,6 +265,8 @@ async def get_bias_report(
     db: Session = Depends(deps.get_db),
     current_user: Any = Depends(deps.get_current_user)
 ) -> Any:
+    if not ai_service.llm:
+        raise _AI_UNAVAILABLE
     papers = db.query(PaperModel).filter(PaperModel.id.in_(request.paper_ids), PaperModel.user_id == current_user.id).all()
     papers_data = [{"title": p.title, "abstract": p.abstract} for p in papers]
     report = await ai_service.generate_bias_report(papers_data)
@@ -259,6 +279,8 @@ async def generate_structured_review(
     db: Session = Depends(deps.get_db),
     current_user: Any = Depends(deps.get_current_user)
 ) -> Any:
+    if not ai_service.llm:
+        raise _AI_UNAVAILABLE
     papers = db.query(PaperModel).filter(PaperModel.id.in_(request.paper_ids), PaperModel.user_id == current_user.id).all()
     papers_data = [{"title": p.title, "abstract": p.abstract} for p in papers]
     review = await ai_service.generate_structured_review(papers_data)

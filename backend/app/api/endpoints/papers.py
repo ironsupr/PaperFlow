@@ -4,7 +4,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload
 from app.api import deps
 from app.models.user import User
-from app.schemas.paper import Paper as PaperSchema, Note as NoteSchema, NoteCreate
+from app.schemas.paper import Paper as PaperSchema, Note as NoteSchema, NoteCreate, NoteUpdate
 from app.services.paper_service import paper_service
 from app.models.paper import Paper as PaperModel, Note as NoteModel, Concept as ConceptModel
 from datetime import datetime
@@ -190,3 +190,37 @@ def get_paper_notes(
     current_user: User = Depends(deps.get_current_user),
 ) -> Any:
     return db.query(NoteModel).filter(NoteModel.paper_id == id, NoteModel.user_id == current_user.id).all()
+
+@router.put("/{id}/notes/{note_id}", response_model=NoteSchema)
+def update_note(
+    *,
+    db: Session = Depends(deps.get_db),
+    id: int,
+    note_id: int,
+    note_in: NoteUpdate,
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    note = db.query(NoteModel).filter(NoteModel.id == note_id, NoteModel.paper_id == id, NoteModel.user_id == current_user.id).first()
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    if note_in.content is not None:
+        note.content = note_in.content
+    if note_in.tags is not None:
+        note.tags = note_in.tags
+    db.commit()
+    db.refresh(note)
+    return note
+
+@router.delete("/{id}/notes/{note_id}", status_code=204)
+def delete_note(
+    *,
+    db: Session = Depends(deps.get_db),
+    id: int,
+    note_id: int,
+    current_user: User = Depends(deps.get_current_user),
+) -> None:
+    note = db.query(NoteModel).filter(NoteModel.id == note_id, NoteModel.paper_id == id, NoteModel.user_id == current_user.id).first()
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    db.delete(note)
+    db.commit()

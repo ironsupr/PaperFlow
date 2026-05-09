@@ -136,8 +136,8 @@ const RightPanel = () => {
     setFocusedPaperId, focusedPaperId, crossPaperAnalysis,
     podcastStatus, podcastAudioUrl, podcastScript,
     discoveryGaps, discoveryNovelty, discoveryTrends, discoveryIdeas,
-    discoveryMethods, discoveryFlaws, isDiscoveryLoading,
-    reviewerScores, reviewerClaims, reviewerBias, reviewerReport, isReviewerLoading,
+    discoveryMethods, discoveryFlaws, isDiscoveryLoading, discoveryError,
+    reviewerScores, reviewerClaims, reviewerBias, reviewerReport, isReviewerLoading, reviewerError,
     activeIntelligenceTab, setDiscoveryState, setReviewerState, setActiveIntelligenceTab,
   } = useStore();
 
@@ -237,7 +237,7 @@ const RightPanel = () => {
 
   const handleReviewerAction = async (tool: string) => {
     if (selectedMultiPaperIds.length < 1) return;
-    setReviewerState({ isReviewerLoading: true });
+    setReviewerState({ isReviewerLoading: true, reviewerError: null });
     try {
       let r: any;
       switch (tool) {
@@ -246,7 +246,12 @@ const RightPanel = () => {
         case 'bias':   r = await api.getBiasReport(selectedMultiPaperIds); setReviewerState({ reviewerBias: r.report }); break;
         case 'report': r = await api.generateStructuredReview(selectedMultiPaperIds); setReviewerState({ reviewerReport: r.review }); break;
       }
-    } catch {} finally { setReviewerState({ isReviewerLoading: false }); }
+    } catch (error: any) {
+      const msg = error?.response?.data?.detail || 'Analysis failed. Please try again.';
+      setReviewerState({ reviewerError: msg });
+    } finally {
+      setReviewerState({ isReviewerLoading: false });
+    }
   };
 
   const togglePlayback = () => {
@@ -441,6 +446,12 @@ const RightPanel = () => {
           {activeTab === 'discovery' && role === 'researcher' && (
             <motion.div key="discovery" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }} className="p-4 space-y-6">
               {isDiscoveryLoading && <Spinner message="Scanning corpus…" />}
+              {discoveryError && !isDiscoveryLoading && (
+                <div className="flex items-start gap-2.5 rounded-xl border border-red-500/25 bg-red-500/8 p-3">
+                  <AlertCircle size={14} className="text-red-400 shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-red-300/90 leading-relaxed">{discoveryError}</p>
+                </div>
+              )}
 
               <SectionCard title="Novelty Check" icon={<Zap size={12} />}>
                 <div className="space-y-2.5">
@@ -512,6 +523,12 @@ const RightPanel = () => {
           {activeTab === 'critique' && role === 'reviewer' && (
             <motion.div key="critique" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }} className="p-4 space-y-6">
               {(isDiscoveryLoading || isReviewerLoading) && <Spinner message="Auditing paper…" />}
+              {(reviewerError || (discoveryError && !isDiscoveryLoading)) && !isReviewerLoading && (
+                <div className="flex items-start gap-2.5 rounded-xl border border-red-500/25 bg-red-500/8 p-3">
+                  <AlertCircle size={14} className="text-red-400 shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-red-300/90 leading-relaxed">{reviewerError || discoveryError}</p>
+                </div>
+              )}
 
               {/* Metrics */}
               <SectionCard title="Paper Metrics" icon={<BarChart3 size={12} />}>

@@ -7,10 +7,10 @@ import '@react-pdf-viewer/core/lib/styles/index.css';
 import '@react-pdf-viewer/default-layout/lib/styles/index.css';
 import '@react-pdf-viewer/highlight/lib/styles/index.css';
 import { useStore } from '../store/useStore';
-import { 
-  X, Save, List, Zap, Sparkles, Loader2, Bookmark, 
-  Tag, Download, Shield, EyeOff, Minimize2, Send, 
-  BarChart3, ShieldCheck, Microscope 
+import {
+  X, Save, List, Zap, Sparkles, Loader2, Bookmark,
+  Tag, Download, Shield, EyeOff, Minimize2, Send,
+  BarChart3, ShieldCheck, Microscope, Pencil, Trash2, Check
 } from 'lucide-react';
 import { api } from '../api/client';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -35,6 +35,8 @@ const PaperReader = ({ isMaximized = false }: PaperReaderProps) => {
   const paper = papers.find(p => p.id === readerId);
   
   const [highlights, setHighlights] = useState<Array<{ content: string; note: string; tags: string[]; position: unknown }>>([]);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingNote, setEditingNote] = useState('');
   const [showSections, setShowSections] = useState(false);
   const [explanation, setExplanation] = useState<string | null>(null);
   const [explanationLoading, setExplanationLoading] = useState(false);
@@ -249,7 +251,7 @@ const PaperReader = ({ isMaximized = false }: PaperReaderProps) => {
   const pdfUrl = `http://localhost:8000/papers/${readerId}/file`;
 
   return (
-    <div className="h-full w-full flex flex-col bg-background border-l border-border select-none overflow-hidden relative">
+    <div className="h-full w-full flex flex-col bg-background border-l border-border overflow-hidden relative">
       {/* Secure Shield Overlay */}
       <AnimatePresence>
         {isSecureShieldActive && (
@@ -435,20 +437,64 @@ const PaperReader = ({ isMaximized = false }: PaperReaderProps) => {
             <div className="flex items-center justify-between"><p className="text-[9px] text-muted-foreground font-black uppercase tracking-[0.2em]">Annotations</p><div className="px-1.5 py-0.5 bg-accent rounded text-foreground text-[9px] font-black">{highlights.length}</div></div>
             <div className="space-y-3">
               {highlights.map((h, i) => (
-                <div key={i} className="p-3 bg-background border border-border rounded-lg space-y-2 group hover:border-primary/30 transition-all cursor-pointer">
+                <div key={i} className="p-3 bg-background border border-border rounded-lg space-y-2 group hover:border-primary/30 transition-all">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-[9px] text-primary font-black uppercase tracking-widest"><Bookmark size={10} /> marker {i + 1}</div>
-                    <div className="flex gap-1">{h.tags.map(tag => <span key={tag} className="px-1 py-0.5 bg-accent/50 text-[8px] mono text-muted-foreground rounded flex items-center gap-1"><Tag size={8} /> {tag}</span>)}</div>
+                    <div className="flex items-center gap-1">
+                      {h.tags.map(tag => <span key={tag} className="px-1 py-0.5 bg-accent/50 text-[8px] mono text-muted-foreground rounded flex items-center gap-1"><Tag size={8} /> {tag}</span>)}
+                      <button
+                        onClick={() => { setEditingIndex(i); setEditingNote(h.note); }}
+                        className="ml-1 p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors opacity-0 group-hover:opacity-100"
+                        title="Edit note"
+                      ><Pencil size={10} /></button>
+                      <button
+                        onClick={() => {
+                          const updated = highlights.filter((_, idx) => idx !== i);
+                          setHighlights(updated);
+                          saveHighlights(updated);
+                        }}
+                        className="p-1 rounded text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100"
+                        title="Delete annotation"
+                      ><Trash2 size={10} /></button>
+                    </div>
                   </div>
                   <p className="text-[10px] text-muted-foreground leading-snug italic line-clamp-3 group-hover:line-clamp-none transition-all">"{h.content}"</p>
-                  <div className="pt-2 border-t border-border"><p className="text-[10px] text-foreground font-medium bg-accent/30 p-2 rounded italic">{h.note}</p></div>
+                  <div className="pt-2 border-t border-border">
+                    {editingIndex === i ? (
+                      <div className="space-y-1.5">
+                        <textarea
+                          value={editingNote}
+                          onChange={e => setEditingNote(e.target.value)}
+                          className="w-full h-16 bg-accent/20 border border-border/50 rounded p-2 text-[10px] text-foreground resize-none focus:outline-none focus:border-primary/40"
+                          autoFocus
+                        />
+                        <div className="flex gap-1 justify-end">
+                          <button
+                            onClick={() => setEditingIndex(null)}
+                            className="px-2 py-1 text-[9px] text-muted-foreground hover:text-foreground rounded hover:bg-accent transition-colors"
+                          >Cancel</button>
+                          <button
+                            onClick={() => {
+                              const updated = highlights.map((item, idx) => idx === i ? { ...item, note: editingNote } : item);
+                              setHighlights(updated);
+                              saveHighlights(updated);
+                              setEditingIndex(null);
+                            }}
+                            className="px-2 py-1 text-[9px] bg-primary text-primary-foreground rounded flex items-center gap-1 hover:opacity-90 transition-opacity"
+                          ><Check size={9} /> Save</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-foreground font-medium bg-accent/30 p-2 rounded italic">{h.note}</p>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
           </div>
         </div>
       </div>
-      <style>{` .secure-reader-content { user-select: none; } @media print { .secure-reader-content { display: none !important; } } `}</style>
+      <style>{` @media print { .secure-reader-content { display: none !important; } } `}</style>
     </div>
   );
 };
