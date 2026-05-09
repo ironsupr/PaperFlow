@@ -12,8 +12,8 @@ import PaperReader from './PaperReader';
 import FloatingReader from './FloatingReader';
 import { useStore } from '../store/useStore';
 import { AnimatePresence } from 'framer-motion';
-import { 
-  Files, 
+import {
+  Files,
   Search,
   Settings,
   User,
@@ -24,7 +24,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Database,
-  Cpu
+  Cpu,
+  Sparkles
 } from 'lucide-react';
 
 const Workspace = () => {
@@ -200,10 +201,14 @@ const Workspace = () => {
                 <ResizablePanels.PanelResizeHandle className="resize-handle" />
                 <ResizablePanels.Panel defaultSize={25} minSize={20} className="bg-card/30 border-l border-border">
                   <div className="h-full flex flex-col">
-                    <div className="h-9 px-4 flex items-center justify-between border-b border-border/50 bg-background/50">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Intelligence</span>
-                      <button onClick={() => setRightSidebarVisible(false)} className="text-muted-foreground hover:text-foreground">
-                        <ChevronRight size={14} />
+                    <div className="h-9 px-3 flex items-center justify-end border-b border-border/50 bg-background/50">
+                      <button
+                        onClick={() => setRightSidebarVisible(false)}
+                        title="Close Intelligence panel"
+                        className="flex items-center gap-1.5 px-2 py-1 rounded text-[10px] text-muted-foreground hover:text-foreground hover:bg-accent transition-all"
+                      >
+                        <span className="font-medium">Close</span>
+                        <ChevronRight size={13} />
                       </button>
                     </div>
                     <div className="flex-1 overflow-hidden">
@@ -216,6 +221,19 @@ const Workspace = () => {
           </ResizablePanels.PanelGroup>
         </div>
       </div>
+
+      {/* Intelligence sidebar re-open tab — visible only when sidebar is hidden */}
+      {!rightSidebarVisible && (
+        <button
+          onClick={() => setRightSidebarVisible(true)}
+          title="Open Intelligence panel"
+          className="fixed right-0 top-1/2 -translate-y-1/2 z-40 flex flex-col items-center gap-1.5 px-1.5 py-3 bg-card border border-border border-r-0 rounded-l-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-all shadow-lg"
+        >
+          <Sparkles size={14} />
+          <span className="text-[9px] font-semibold uppercase tracking-widest [writing-mode:vertical-rl] rotate-180">Intelligence</span>
+          <ChevronLeft size={12} />
+        </button>
+      )}
 
       {/* Floating Readers Layer */}
       <AnimatePresence>
