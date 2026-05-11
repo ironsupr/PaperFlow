@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store/useStore';
+import MarkdownText from './MarkdownText';
 import {
   Sparkles, Loader2, GitBranch, User, Database,
   MessageSquare, Activity, Terminal, Binary, GitCompare,
@@ -11,50 +12,6 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { api, API_BASE_URL } from '../api/client';
 
-// ─── Inline markdown helpers ────────────────────────────────────────────────
-
-function formatInline(text: string): React.ReactNode {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
-  if (parts.length === 1) return text;
-  return (
-    <>
-      {parts.map((part, i) =>
-        part.startsWith('**') && part.endsWith('**')
-          ? <strong key={i} className="text-foreground font-semibold">{part.slice(2, -2)}</strong>
-          : part
-      )}
-    </>
-  );
-}
-
-const MarkdownText = ({ text, className = '' }: { text: string; className?: string }) => {
-  if (!text) return null;
-  return (
-    <div className={`space-y-1.5 ${className}`}>
-      {text.split('\n').map((line, i) => {
-        const t = line.trim();
-        if (!t) return <div key={i} className="h-1" />;
-        if (t.startsWith('### ')) return <p key={i} className="text-[11px] font-bold text-foreground mt-2">{t.slice(4)}</p>;
-        if (t.startsWith('## '))  return <p key={i} className="text-[12px] font-bold text-foreground mt-3 pb-0.5 border-b border-border/30">{t.slice(3)}</p>;
-        if (t.startsWith('# '))   return <p key={i} className="text-[13px] font-bold text-foreground mt-3">{t.slice(2)}</p>;
-        if (t.match(/^[-•*] /)) return (
-          <div key={i} className="flex gap-2 items-start pl-1">
-            <span className="text-primary/70 shrink-0 mt-[3px] text-[9px]">▸</span>
-            <span className="text-[11px] leading-relaxed text-foreground/85">{formatInline(t.slice(2))}</span>
-          </div>
-        );
-        const nm = t.match(/^(\d+)\.\s(.+)$/);
-        if (nm) return (
-          <div key={i} className="flex gap-2 items-start pl-1">
-            <span className="text-primary/60 text-[10px] font-bold mono shrink-0 mt-[3px] min-w-[16px]">{nm[1]}.</span>
-            <span className="text-[11px] leading-relaxed text-foreground/85">{formatInline(nm[2])}</span>
-          </div>
-        );
-        return <p key={i} className="text-[11px] leading-relaxed text-foreground/85">{formatInline(t)}</p>;
-      })}
-    </div>
-  );
-};
 
 // ─── Shared sub-components ──────────────────────────────────────────────────
 

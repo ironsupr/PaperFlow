@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from 'react';
 import { Worker, Viewer, RotateDirection } from '@react-pdf-viewer/core';
 import { defaultLayoutPlugin } from '@react-pdf-viewer/default-layout';
 import { highlightPlugin } from '@react-pdf-viewer/highlight';
@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { api } from '../api/client';
 import { motion, AnimatePresence } from 'framer-motion';
+import MarkdownText from './MarkdownText';
 
 interface PaperReaderProps {
   isMaximized?: boolean;
@@ -44,18 +45,15 @@ const PaperReader = ({ isMaximized = false }: PaperReaderProps) => {
   highlightsRef.current = highlights;
   const activeHighlightIndexRef = useRef(activeHighlightIndex);
   activeHighlightIndexRef.current = activeHighlightIndex;
+  // Ref to the floating assistant — lets the intelligence bar trigger queries
+  // without causing the PDF viewer's parent to re-render
+  const assistantRef = useRef<AssistantHandle>(null);
   const [showSections, setShowSections] = useState(false);
   const [explanation, setExplanation] = useState<string | null>(null);
   const [explanationLoading, setExplanationLoading] = useState(false);
 
   // Secure Reader State
   const [isSecureShieldActive, setIsSecureShieldActive] = useState(false);
-
-  // Fullscreen AI State
-  const [isAssistantExpanded, setIsAssistantExpanded] = useState(false);
-  const [assistantMessages, setAssistantMessages] = useState<Array<{ role: 'user' | 'ai', text: string }>>([]);
-  const [assistantInput, setAssistantInput] = useState('');
-  const [isAssistantLoading, setIsAssistantLoading] = useState(false);
 
   const handleSecurityTrigger = useCallback(() => {
     setIsSecureShieldActive(true);
@@ -87,29 +85,6 @@ const PaperReader = ({ isMaximized = false }: PaperReaderProps) => {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [handleSecurityTrigger, clearSecurityTrigger]);
-
-  const handleAssistantQuery = async (overrideQuery?: string) => {
-    const queryText = overrideQuery || assistantInput;
-    if (!queryText.trim() || !readerId) return;
-
-    if (!overrideQuery) {
-      setAssistantMessages(prev => [...prev, { role: 'user', text: queryText }]);
-      setAssistantInput('');
-    }
-    
-    setIsAssistantLoading(true);
-    setIsAssistantExpanded(true);
-    
-    try {
-      const res = await api.queryAI(queryText, readerId);
-      const answer = res.answer.split('FOLLOW_UP:')[0].trim();
-      setAssistantMessages(prev => [...prev, { role: 'ai', text: answer }]);
-    } catch (error) {
-      console.error('Assistant error:', error);
-    } finally {
-      setIsAssistantLoading(false);
-    }
-  };
 
   const renderHighlightTarget = (props: RenderHighlightTargetProps) => (
     <div
@@ -159,7 +134,7 @@ const PaperReader = ({ isMaximized = false }: PaperReaderProps) => {
           <div className="w-px h-3 bg-border" />
           <button
             className="flex items-center gap-2 px-2 py-1 text-[9px] font-bold text-orange-400 hover:bg-accent rounded transition-all"
-            onClick={() => handleAssistantQuery(`Critically analyze this selection: "${props.selectedText}"`)}
+            onClick={() => assistantRef.current?.query(`Critically analyze this selection: "${props.selectedText}"`)}
           >
             <Microscope size={12} /> Critique
           </button>
@@ -194,30 +169,15 @@ const PaperReader = ({ isMaximized = false }: PaperReaderProps) => {
     return <div>{overlays}</div>;
   }, []);
 
-  const highlightPluginInstance = highlightPlugin({
-    renderHighlightTarget,
-    renderHighlights,
-  });
-
+  const highlightPluginInstance = highlightPlugin({ renderHighlightTarget, renderHighlights });
   const { jumpToHighlightArea } = highlightPluginInstance;
 
-  const handleJumpToAnnotation = useCallback((index: number) => {
-    const h = highlightsRef.current[index];
-    if (!h) return;
-    const area = h.highlightAreas?.[0] ?? h.position;
-    if (!area) return;
-    setActiveHighlightIndex(index);
-    jumpToHighlightArea(area);
-    // Auto-clear the active state after 2.5 s
-    setTimeout(() => setActiveHighlightIndex(null), 2500);
-  }, [jumpToHighlightArea]);
-
   const defaultLayoutPluginInstance = defaultLayoutPlugin({
-    sidebarTabs: () => [], 
+    sidebarTabs: () => [],
     renderToolbar: (Toolbar) => (
       <Toolbar>
         {(props) => {
-          const { 
+          const {
             CurrentScale, ZoomIn, ZoomOut, EnterFullScreen, Rotate, ShowSearchPopover,
             GoToNextPage, GoToPreviousPage, NumberOfPages, CurrentPageInput
           } = props;
@@ -245,6 +205,16 @@ const PaperReader = ({ isMaximized = false }: PaperReaderProps) => {
     ),
   });
 
+  const handleJumpToAnnotation = useCallback((index: number) => {
+    const h = highlightsRef.current[index];
+    if (!h) return;
+    const area = h.highlightAreas?.[0] ?? h.position;
+    if (!area) return;
+    setActiveHighlightIndex(index);
+    jumpToHighlightArea(area);
+    setTimeout(() => setActiveHighlightIndex(null), 2500);
+  }, [jumpToHighlightArea]);
+
   useEffect(() => {
     const paperHighlights = (paper?.highlights || []).map((h: any) => ({
       ...h,
@@ -252,6 +222,7 @@ const PaperReader = ({ isMaximized = false }: PaperReaderProps) => {
     }));
     setHighlights(paperHighlights);
   }, [paper]);
+
 
 
   const handleExplain = async (text: string) => {
@@ -356,70 +327,11 @@ const PaperReader = ({ isMaximized = false }: PaperReaderProps) => {
           ))}
         </div>
 
-        {/* Floating Assistant (Fullscreen Only) */}
-        {isMaximized && (
+        {/* Floating Assistant (Fullscreen Only) — isolated component so its state
+            changes never cause the PDF Viewer above to re-render */}
+        {isMaximized && readerId && (
           <div className="absolute bottom-20 right-8 z-[200]">
-            <AnimatePresence>
-              {isAssistantExpanded ? (
-                <motion.div 
-                  drag
-                  dragMomentum={false}
-                  initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                  className="w-80 h-[450px] bg-card border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden"
-                >
-                  <div className="p-3 border-b border-border bg-accent/5 flex items-center justify-between cursor-move">
-                    <div className="flex items-center gap-2">
-                      <Sparkles size={14} className="text-primary" />
-                      <span className="text-[10px] font-black uppercase tracking-widest">Neural Assistant</span>
-                    </div>
-                    <button onClick={() => setIsAssistantExpanded(false)} className="p-1 hover:bg-accent rounded transition-colors text-muted-foreground hover:text-foreground"><X size={14} /></button>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-                    {assistantMessages.map((m, i) => (
-                      <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[90%] p-2.5 rounded-lg text-[11px] leading-relaxed ${m.role === 'user' ? 'bg-primary text-primary-foreground font-medium' : 'bg-accent/20 border border-border text-foreground/90'}`}>
-                          {m.text}
-                        </div>
-                      </div>
-                    ))}
-                    {isAssistantLoading && (
-                      <div className="flex justify-start">
-                        <div className="bg-accent/20 border border-border p-2 rounded-lg"><Loader2 size={12} className="animate-spin text-muted-foreground" /></div>
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-3 border-t border-border bg-background">
-                    <div className="relative flex items-center">
-                      <input 
-                        type="text" 
-                        placeholder="Ask about this paper..."
-                        className="w-full bg-accent/20 border border-border rounded-md py-1.5 pl-3 pr-8 text-[11px] focus:outline-none focus:border-primary/50 transition-all"
-                        value={assistantInput}
-                        onChange={e => setAssistantInput(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && handleAssistantQuery()}
-                      />
-                      <button 
-                        onClick={() => handleAssistantQuery()}
-                        className="absolute right-1.5 p-1 text-muted-foreground hover:text-primary transition-colors"
-                      >
-                        <Send size={14} />
-                      </button>
-                    </div>
-                  </div>
-                </motion.div>
-              ) : (
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => setIsAssistantExpanded(true)}
-                  className="w-12 h-12 bg-foreground text-background rounded-full flex items-center justify-center shadow-2xl hover:opacity-90 transition-all border-4 border-background"
-                >
-                  <Sparkles size={24} />
-                </motion.button>
-              )}
-            </AnimatePresence>
+            <FloatingAssistant ref={assistantRef} paperId={readerId} />
           </div>
         )}
 
@@ -427,12 +339,12 @@ const PaperReader = ({ isMaximized = false }: PaperReaderProps) => {
         {isMaximized && (
           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[180]">
             <div className="flex items-center gap-1 bg-card/80 backdrop-blur-xl border border-border rounded-full p-1 shadow-2xl ring-1 ring-white/5">
-              <QuickAction icon={<BarChart3 size={14} />} label="Summary" onClick={() => handleAssistantQuery("Generate a comprehensive technical summary of this paper.")} />
-              <QuickAction icon={<Microscope size={14} />} label="Methods" onClick={() => handleAssistantQuery("Extract and audit the specific methodologies and technical steps used in this research.")} />
-              <QuickAction icon={<ShieldCheck size={14} />} label="Verify Claims" onClick={() => handleAssistantQuery("Identify and verify the core scientific claims made in this paper. Are they supported by the results?")} />
+              <QuickAction icon={<BarChart3 size={14} />} label="Summary" onClick={() => assistantRef.current?.query("Generate a comprehensive technical summary of this paper.")} />
+              <QuickAction icon={<Microscope size={14} />} label="Methods" onClick={() => assistantRef.current?.query("Extract and audit the specific methodologies and technical steps used in this research.")} />
+              <QuickAction icon={<ShieldCheck size={14} />} label="Verify Claims" onClick={() => assistantRef.current?.query("Identify and verify the core scientific claims made in this paper. Are they supported by the results?")} />
               <div className="w-px h-4 bg-border mx-1" />
-              <button onClick={() => setIsAssistantExpanded(!isAssistantExpanded)} className="px-3 py-1.5 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10 rounded-full transition-all">
-                {isAssistantExpanded ? 'Hide AI' : 'Show AI'}
+              <button onClick={() => assistantRef.current?.toggle()} className="px-3 py-1.5 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10 rounded-full transition-all">
+                AI Assistant
               </button>
             </div>
           </div>
@@ -480,7 +392,12 @@ const PaperReader = ({ isMaximized = false }: PaperReaderProps) => {
                       <div className="flex items-center gap-3"><Sparkles size={16} className="text-primary" /><h4 className="text-[10px] text-foreground font-black uppercase tracking-widest">Neural Insight</h4></div>
                       <button onClick={() => setExplanation(null)} className="p-1 hover:bg-accent rounded text-muted-foreground transition-colors"><X size={14} /></button>
                     </div>
-                    <div className="min-h-[60px]">{explanationLoading ? <div className="flex items-center gap-3 py-4 text-muted-foreground"><Loader2 size={16} className="animate-spin text-primary" /><span className="text-[10px] font-bold uppercase tracking-widest">Analyzing selection...</span></div> : <p className="text-[11px] text-muted-foreground leading-relaxed italic border-l border-primary/20 pl-3">{explanation}</p>}</div>
+                    <div className="min-h-[60px]">
+                      {explanationLoading
+                        ? <div className="flex items-center gap-3 py-4 text-muted-foreground"><Loader2 size={16} className="animate-spin text-primary" /><span className="text-[10px] font-bold uppercase tracking-widest">Analyzing selection...</span></div>
+                        : <div className="border-l-2 border-primary/20 pl-3"><MarkdownText text={explanation || ''} /></div>
+                      }
+                    </div>
                   </div>
                 </motion.div>
               )}
@@ -714,6 +631,138 @@ const AbstractReader = ({ paper, onExplain }: { paper: any; onExplain: (text: st
     </div>
   );
 };
+
+// ─── Floating Assistant ───────────────────────────────────────────────────────
+// Isolated component — keeps all AI state internal so state changes never
+// cause the PDF Viewer in the parent to re-render and flash black.
+
+interface AssistantHandle {
+  query: (text: string) => void;
+  toggle: () => void;
+}
+
+const FloatingAssistant = forwardRef<AssistantHandle, { paperId: number }>(
+  ({ paperId }, ref) => {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const [messages, setMessages] = useState<Array<{ role: 'user' | 'ai'; text: string }>>([]);
+    const [input, setInput] = useState('');
+    const [loading, setLoading] = useState(false);
+    // Ref to the scrollable messages div — scroll it directly to avoid
+    // scrollIntoView() propagating up and scrolling the PDF viewer
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+      const el = scrollContainerRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    }, [messages, loading]);
+
+    const runQuery = useCallback(async (text: string) => {
+      if (!text.trim()) return;
+      setMessages(prev => [...prev, { role: 'user', text }]);
+      setIsExpanded(true);
+      setLoading(true);
+      try {
+        const res = await api.queryAI(text, paperId);
+        const answer = res.answer.split('FOLLOW_UP:')[0].trim();
+        setMessages(prev => [...prev, { role: 'ai', text: answer }]);
+      } catch {
+        setMessages(prev => [...prev, { role: 'ai', text: 'Something went wrong. Please try again.' }]);
+      } finally {
+        setLoading(false);
+      }
+    }, [paperId]);
+
+    useImperativeHandle(ref, () => ({
+      query: runQuery,
+      toggle: () => setIsExpanded(prev => !prev),
+    }), [runQuery]);
+
+    return (
+      <AnimatePresence>
+        {isExpanded ? (
+          <motion.div
+            drag dragMomentum={false}
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            className="w-80 h-[450px] bg-card border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden"
+          >
+            <div className="p-3 border-b border-border bg-accent/5 flex items-center justify-between cursor-move shrink-0">
+              <div className="flex items-center gap-2">
+                <Sparkles size={14} className="text-primary" />
+                <span className="text-[10px] font-black uppercase tracking-widest">Neural Assistant</span>
+              </div>
+              <button onClick={() => setIsExpanded(false)} className="p-1 hover:bg-accent rounded transition-colors text-muted-foreground hover:text-foreground">
+                <X size={14} />
+              </button>
+            </div>
+
+            <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
+              {messages.length === 0 && !loading && (
+                <p className="text-[10px] text-muted-foreground text-center py-6 leading-relaxed">
+                  Ask anything about this paper — summaries, methods, claims, comparisons.
+                </p>
+              )}
+              {messages.map((m, i) => (
+                <div key={i} className={`flex flex-col gap-1 ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
+                  <span className="text-[8px] font-bold uppercase tracking-widest text-muted-foreground px-1">
+                    {m.role === 'user' ? 'You' : 'Neural AI'}
+                  </span>
+                  <div className={`max-w-[92%] px-3 py-2.5 rounded-xl ${
+                    m.role === 'user'
+                      ? 'bg-primary text-primary-foreground rounded-br-sm'
+                      : 'bg-card border border-border rounded-bl-sm'
+                  }`}>
+                    {m.role === 'user'
+                      ? <p className="text-[11px] leading-relaxed">{m.text}</p>
+                      : <MarkdownText text={m.text} compact />
+                    }
+                  </div>
+                </div>
+              ))}
+              {loading && (
+                <div className="flex items-start">
+                  <div className="bg-card border border-border px-3 py-2.5 rounded-xl rounded-bl-sm flex items-center gap-2">
+                    <Loader2 size={11} className="animate-spin text-primary" />
+                    <span className="text-[10px] text-muted-foreground">Thinking...</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-3 border-t border-border bg-background shrink-0">
+              <div className="relative flex items-center">
+                <input
+                  type="text"
+                  placeholder="Ask about this paper..."
+                  className="w-full bg-accent/20 border border-border rounded-md py-1.5 pl-3 pr-8 text-[11px] focus:outline-none focus:border-primary/50 transition-all"
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && input.trim()) { runQuery(input); setInput(''); } }}
+                />
+                <button
+                  onClick={() => { if (input.trim()) { runQuery(input); setInput(''); } }}
+                  className="absolute right-1.5 p-1 text-muted-foreground hover:text-primary transition-colors"
+                >
+                  <Send size={14} />
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        ) : (
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={() => setIsExpanded(true)}
+            className="w-12 h-12 bg-foreground text-background rounded-full flex items-center justify-center shadow-2xl hover:opacity-90 transition-all border-4 border-background"
+          >
+            <Sparkles size={24} />
+          </motion.button>
+        )}
+      </AnimatePresence>
+    );
+  }
+);
 
 const QuickAction = ({ icon, label, onClick }: { icon: any, label: string, onClick: () => void }) => (
   <button onClick={onClick} className="flex items-center gap-2 px-4 py-2 hover:bg-foreground/5 rounded-full text-muted-foreground hover:text-foreground transition-all group">
