@@ -23,7 +23,14 @@ const nodeTypes = {
 };
 
 const GraphView = () => {
-  const { graphData, setSelectedPaperId, focusedPaperId, setFocusedPaperId, papers, fetchGraphData, calculateLayout } = useStore();
+  const { graphData, setSelectedPaperId, focusedPaperId, setFocusedPaperId, papers, fetchGraphData, calculateLayout, preferences } = useStore();
+  const isDark = preferences.theme !== 'light';
+  const edgeColor     = isDark ? '#ffffff' : '#18181b';
+  const bgDotColor    = isDark ? '#27272a' : '#d4d4d8';
+  const minimapMask   = isDark ? 'rgba(9,9,11,0.7)' : 'rgba(250,250,250,0.7)';
+  const minimapNode   = isDark ? '#fafafa' : '#18181b';
+  const minimapExt    = isDark ? '#27272a' : '#a1a1aa';
+  const minimapConcept = isDark ? '#ffffff' : '#3f3f46';
   const [menu, setMenu] = useState<{ id: string; top: number; left: number } | null>(null);
   const [edgeContext, setEdgeContext] = useState<string[] | null>(null);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
@@ -59,11 +66,11 @@ const GraphView = () => {
       ...edge,
       markerEnd: {
         type: MarkerType.ArrowClosed,
-        color: '#ffffff',
+        color: edgeColor,
       },
-      style: { 
-        stroke: '#ffffff', 
-        strokeWidth: edge.type === 'semantic' ? 2 : 2.5, 
+      style: {
+        stroke: edgeColor,
+        strokeWidth: edge.type === 'semantic' ? 2 : 2.5,
         opacity: edge.type === 'semantic' ? 0.5 : 0.8,
         strokeDasharray: edge.type === 'semantic' ? '5 5' : 'none'
       },
@@ -71,7 +78,7 @@ const GraphView = () => {
     })));
 
     setInitialLoadComplete(true);
-  }, [graphData, focusedPaperId, setNodes, setEdges]);
+  }, [graphData, focusedPaperId, edgeColor, setNodes, setEdges]);
 
   const handleLayoutChange = (mode: 'standard' | 'timeline' | 'clusters') => {
     setLayoutMode(mode);
@@ -145,16 +152,16 @@ const GraphView = () => {
         zoomOnDoubleClick={true}
         style={{ width: '100%', height: '100%' }}
       >
-        <Background color="#27272a" gap={20} size={1} variant={BackgroundVariant.Dots} />
-        
+        <Background color={bgDotColor} gap={20} size={1} variant={BackgroundVariant.Dots} />
+
         <Controls className="bg-card border border-border fill-foreground !shadow-none rounded-md overflow-hidden" />
-        
-        <MiniMap 
+
+        <MiniMap
           nodeColor={(node) => {
-            if (node.type === 'concept') return '#ffffff';
-            return (node.data?.isExternal ? '#27272a' : '#fafafa');
+            if (node.type === 'concept') return minimapConcept;
+            return node.data?.isExternal ? minimapExt : minimapNode;
           }}
-          maskColor="rgba(9, 9, 11, 0.7)"
+          maskColor={minimapMask}
           className="bg-card border border-border rounded-md overflow-hidden !m-4 !shadow-none"
         />
 

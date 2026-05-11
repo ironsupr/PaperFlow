@@ -33,6 +33,30 @@
   --font-mono: "JetBrains Mono", "Geist Mono", "Fira Code", "IBM Plex Mono", monospace;
 }
 
+/* ── Light theme overrides ─────────────────────────────────────────────── */
+.light {
+  --color-background: #fafafa;
+  --color-foreground: #09090b;
+  --color-card: #ffffff;
+  --color-card-foreground: #09090b;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #09090b;
+  --color-primary: #18181b;
+  --color-primary-foreground: #fafafa;
+  --color-secondary: #f4f4f5;
+  --color-secondary-foreground: #18181b;
+  --color-muted: #f4f4f5;
+  --color-muted-foreground: #71717a;
+  --color-accent: #f4f4f5;
+  --color-accent-foreground: #18181b;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #fafafa;
+  --color-border: #e4e4e7;
+  --color-input: #e4e4e7;
+  --color-ring: #a1a1aa;
+  color-scheme: light;
+}
+
 :root {
   font-family: var(--font-sans);
   line-height: 1.6;
@@ -88,6 +112,18 @@ body {
 .custom-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: #27272a transparent;
+}
+
+.light ::-webkit-scrollbar-thumb {
+  background: #a1a1aa;
+}
+
+.light ::-webkit-scrollbar-thumb:hover {
+  background: #71717a;
+}
+
+.light .custom-scrollbar {
+  scrollbar-color: #a1a1aa transparent;
 }
 
 /* Resizable Panel Handles (VS Code Style) */

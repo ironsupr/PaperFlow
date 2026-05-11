@@ -4,6 +4,10 @@ export type UserRole = 'student' | 'researcher' | 'reviewer';
 
 export interface AppPreferences {
   openReaderOnSelect: boolean;
+  theme: 'dark' | 'light';
+  citationStyle: 'APA' | 'MLA' | 'Chicago' | 'IEEE';
+  graphNodeLabels: boolean;
+  summaryLevel: 'beginner' | 'intermediate' | 'technical';
 }
 
 export interface User {
@@ -150,16 +154,28 @@ export const useStore = create<AppState>((set, get) => ({
   user: null,
   token: localStorage.getItem('token'),
   preferences: (() => {
+    const defaults: AppPreferences = {
+      openReaderOnSelect: true,
+      theme: 'dark',
+      citationStyle: 'APA',
+      graphNodeLabels: true,
+      summaryLevel: 'intermediate',
+    };
     try {
       const stored = localStorage.getItem('paperflow-preferences');
-      return stored ? { openReaderOnSelect: true, ...JSON.parse(stored) } : { openReaderOnSelect: true };
+      const prefs: AppPreferences = stored ? { ...defaults, ...JSON.parse(stored) } : defaults;
+      if (prefs.theme === 'light') document.documentElement.classList.add('light');
+      return prefs;
     } catch {
-      return { openReaderOnSelect: true };
+      return defaults;
     }
   })(),
   setPreferences: (preferences) => set((state) => {
     const nextPreferences = { ...state.preferences, ...preferences };
     localStorage.setItem('paperflow-preferences', JSON.stringify(nextPreferences));
+    if ('theme' in preferences) {
+      document.documentElement.classList.toggle('light', nextPreferences.theme === 'light');
+    }
     return { preferences: nextPreferences };
   }),
   setUser: (user) => set({ user }),
@@ -320,7 +336,7 @@ export const useStore = create<AppState>((set, get) => ({
       activeSidebarView: 'library',
       recentlyOpenedPaperIds: [],
       explorerResults: [],
-      preferences: { openReaderOnSelect: true }
+      preferences: { openReaderOnSelect: true, theme: 'dark', citationStyle: 'APA', graphNodeLabels: true, summaryLevel: 'intermediate' }
     });
   },
 
