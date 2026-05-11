@@ -47,6 +47,8 @@ export interface Paper {
   created_at?: string;
   title: string;
   authors?: string;
+  abstract?: string;
+  upload_url?: string | null;
   scholar_url?: string;
   reference_ids?: number[];
   highlights?: Array<{ content: string; note: string; position: unknown }>;

@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Worker, Viewer, RotateDirection } from '@react-pdf-viewer/core';
 import { defaultLayoutPlugin } from '@react-pdf-viewer/default-layout';
 import { highlightPlugin } from '@react-pdf-viewer/highlight';
-import type { RenderHighlightTargetProps } from '@react-pdf-viewer/highlight';
+import type { RenderHighlightTargetProps, RenderHighlightsProps, HighlightArea } from '@react-pdf-viewer/highlight';
 import '@react-pdf-viewer/core/lib/styles/index.css';
 import '@react-pdf-viewer/default-layout/lib/styles/index.css';
 import '@react-pdf-viewer/highlight/lib/styles/index.css';
@@ -10,7 +10,8 @@ import { useStore } from '../store/useStore';
 import {
   X, Save, List, Zap, Sparkles, Loader2, Bookmark,
   Tag, Download, Shield, EyeOff, Minimize2, Send,
-  BarChart3, ShieldCheck, Microscope, Pencil, Trash2, Check
+  BarChart3, ShieldCheck, Microscope, Pencil, Trash2, Check,
+  ExternalLink, FileText, Users, Calendar, MapPin
 } from 'lucide-react';
 import { api } from '../api/client';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -34,9 +35,15 @@ const PaperReader = ({ isMaximized = false }: PaperReaderProps) => {
   const readerId = isMaximized ? maximizedReaderId : activeReaderId;
   const paper = papers.find(p => p.id === readerId);
   
-  const [highlights, setHighlights] = useState<Array<{ content: string; note: string; tags: string[]; position: unknown }>>([]);
+  const [highlights, setHighlights] = useState<Array<{ content: string; note: string; tags: string[]; position: HighlightArea | null; highlightAreas?: HighlightArea[] }>>([]);
+  const [activeHighlightIndex, setActiveHighlightIndex] = useState<number | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingNote, setEditingNote] = useState('');
+  // Refs so renderHighlights callback always reads current values without recreating the plugin
+  const highlightsRef = useRef(highlights);
+  highlightsRef.current = highlights;
+  const activeHighlightIndexRef = useRef(activeHighlightIndex);
+  activeHighlightIndexRef.current = activeHighlightIndex;
   const [showSections, setShowSections] = useState(false);
   const [explanation, setExplanation] = useState<string | null>(null);
   const [explanationLoading, setExplanationLoading] = useState(false);
@@ -124,15 +131,16 @@ const PaperReader = ({ isMaximized = false }: PaperReaderProps) => {
               note: note,
               tags: tags,
               position: props.selectionRegion,
+              highlightAreas: props.highlightAreas,
             };
             const updated = [...highlights, newHighlight];
             setHighlights(updated);
             saveHighlights(updated);
-            
+
             api.createNote(readerId!, {
               content: note,
               tags: tags,
-              position_data: props.selectionRegion
+              position_data: { selectionRegion: props.selectionRegion, highlightAreas: props.highlightAreas }
             });
           }
         }}
@@ -160,9 +168,49 @@ const PaperReader = ({ isMaximized = false }: PaperReaderProps) => {
     </div>
   );
 
+  const renderHighlights = useCallback((props: RenderHighlightsProps) => {
+    const overlays = highlightsRef.current.flatMap((h, i) => {
+      const areas: HighlightArea[] = h.highlightAreas?.length
+        ? h.highlightAreas
+        : h.position ? [h.position] : [];
+      return areas
+        .filter(area => area.pageIndex === props.pageIndex)
+        .map((area, j) => (
+          <div
+            key={`${i}-${j}`}
+            style={{
+              ...props.getCssProperties(area, props.rotation),
+              position: 'absolute',
+              background: activeHighlightIndexRef.current === i
+                ? 'rgba(251, 191, 36, 0.55)'
+                : 'rgba(251, 191, 36, 0.25)',
+              borderRadius: '2px',
+              transition: 'background 0.3s ease',
+              pointerEvents: 'none',
+            }}
+          />
+        ));
+    });
+    return <div>{overlays}</div>;
+  }, []);
+
   const highlightPluginInstance = highlightPlugin({
     renderHighlightTarget,
+    renderHighlights,
   });
+
+  const { jumpToHighlightArea } = highlightPluginInstance;
+
+  const handleJumpToAnnotation = useCallback((index: number) => {
+    const h = highlightsRef.current[index];
+    if (!h) return;
+    const area = h.highlightAreas?.[0] ?? h.position;
+    if (!area) return;
+    setActiveHighlightIndex(index);
+    jumpToHighlightArea(area);
+    // Auto-clear the active state after 2.5 s
+    setTimeout(() => setActiveHighlightIndex(null), 2500);
+  }, [jumpToHighlightArea]);
 
   const defaultLayoutPluginInstance = defaultLayoutPlugin({
     sidebarTabs: () => [], 
@@ -248,6 +296,7 @@ const PaperReader = ({ isMaximized = false }: PaperReaderProps) => {
 
   if (!readerId || !paper) return null;
 
+  const isExternal = paper.is_external === 1 || !paper.upload_url;
   const pdfUrl = `http://localhost:8000/papers/${readerId}/file`;
 
   return (
@@ -268,9 +317,12 @@ const PaperReader = ({ isMaximized = false }: PaperReaderProps) => {
       {/* Reader Header */}
       <div className="h-12 px-4 border-b border-border flex items-center justify-between bg-card shrink-0 z-50">
         <div className="flex items-center gap-3 min-w-0">
-          <Shield size={16} className="text-primary shrink-0" />
+          {isExternal ? <FileText size={16} className="text-blue-400 shrink-0" /> : <Shield size={16} className="text-primary shrink-0" />}
           <h3 className="text-[11px] font-bold text-foreground truncate max-w-md uppercase tracking-tight">{paper.title}</h3>
-          <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[8px] font-black tracking-widest border border-primary/20">SECURE_READER</span>
+          {isExternal
+            ? <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 text-[8px] font-black tracking-widest border border-blue-500/20">ABSTRACT_VIEW</span>
+            : <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[8px] font-black tracking-widest border border-primary/20">SECURE_READER</span>
+          }
         </div>
         
         <div className="flex items-center gap-1">
@@ -406,16 +458,20 @@ const PaperReader = ({ isMaximized = false }: PaperReaderProps) => {
 
         <div className="flex-1 bg-accent/20 relative flex flex-col overflow-hidden">
           <div className="flex-1 relative secure-reader-content overflow-y-auto custom-scrollbar">
-            <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.4.120/build/pdf.worker.min.js">
-              <div style={{ height: '100%' }}>
-                <Viewer
-                  fileUrl={pdfUrl}
-                  httpHeaders={{ Authorization: `Bearer ${token}` }}
-                  plugins={[defaultLayoutPluginInstance, highlightPluginInstance]}
-                  theme="dark"
-                />
-              </div>
-            </Worker>
+            {isExternal ? (
+              <AbstractReader paper={paper} onExplain={handleExplain} />
+            ) : (
+              <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.4.120/build/pdf.worker.min.js">
+                <div style={{ height: '100%' }}>
+                  <Viewer
+                    fileUrl={pdfUrl}
+                    httpHeaders={{ Authorization: `Bearer ${token}` }}
+                    plugins={[defaultLayoutPluginInstance, highlightPluginInstance]}
+                    theme="dark"
+                  />
+                </div>
+              </Worker>
+            )}
             <AnimatePresence>
               {(explanation || explanationLoading) && (
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute bottom-24 left-1/2 -translate-x-1/2 z-[150] w-full max-w-lg px-4">
@@ -437,14 +493,35 @@ const PaperReader = ({ isMaximized = false }: PaperReaderProps) => {
             <div className="flex items-center justify-between"><p className="text-[9px] text-muted-foreground font-black uppercase tracking-[0.2em]">Annotations</p><div className="px-1.5 py-0.5 bg-accent rounded text-foreground text-[9px] font-black">{highlights.length}</div></div>
             <div className="space-y-3">
               {highlights.map((h, i) => (
-                <div key={i} className="p-3 bg-background border border-border rounded-lg space-y-2 group hover:border-primary/30 transition-all">
+                <div
+                  key={i}
+                  className={`p-3 border rounded-lg space-y-2 group transition-all ${
+                    activeHighlightIndex === i
+                      ? 'bg-yellow-500/10 border-yellow-500/40'
+                      : 'bg-background border-border hover:border-primary/30'
+                  }`}
+                >
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-[9px] text-primary font-black uppercase tracking-widest"><Bookmark size={10} /> marker {i + 1}</div>
+                    <div className="flex items-center gap-2 text-[9px] text-primary font-black uppercase tracking-widest">
+                      <Bookmark size={10} /> marker {i + 1}
+                      {h.position && (
+                        <span className="text-[8px] text-muted-foreground font-normal normal-case tracking-normal">
+                          p.{h.position.pageIndex + 1}
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-1">
                       {h.tags.map(tag => <span key={tag} className="px-1 py-0.5 bg-accent/50 text-[8px] mono text-muted-foreground rounded flex items-center gap-1"><Tag size={8} /> {tag}</span>)}
+                      {h.position && !isExternal && (
+                        <button
+                          onClick={() => handleJumpToAnnotation(i)}
+                          className="p-1 rounded text-muted-foreground hover:text-yellow-400 hover:bg-yellow-500/10 transition-colors opacity-0 group-hover:opacity-100"
+                          title="Jump to highlight in PDF"
+                        ><MapPin size={10} /></button>
+                      )}
                       <button
                         onClick={() => { setEditingIndex(i); setEditingNote(h.note); }}
-                        className="ml-1 p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors opacity-0 group-hover:opacity-100"
+                        className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors opacity-0 group-hover:opacity-100"
                         title="Edit note"
                       ><Pencil size={10} /></button>
                       <button
@@ -458,7 +535,18 @@ const PaperReader = ({ isMaximized = false }: PaperReaderProps) => {
                       ><Trash2 size={10} /></button>
                     </div>
                   </div>
-                  <p className="text-[10px] text-muted-foreground leading-snug italic line-clamp-3 group-hover:line-clamp-none transition-all">"{h.content}"</p>
+                  {/* Quoted selection — clicking jumps to it */}
+                  <button
+                    className="w-full text-left"
+                    onClick={() => h.position && !isExternal && handleJumpToAnnotation(i)}
+                    title={h.position && !isExternal ? "Click to jump to this highlight" : undefined}
+                  >
+                    <p className={`text-[10px] leading-snug italic line-clamp-3 group-hover:line-clamp-none transition-all ${
+                      h.position && !isExternal ? 'text-muted-foreground hover:text-foreground cursor-pointer' : 'text-muted-foreground cursor-default'
+                    }`}>
+                      "{h.content}"
+                    </p>
+                  </button>
                   <div className="pt-2 border-t border-border">
                     {editingIndex === i ? (
                       <div className="space-y-1.5">
@@ -495,6 +583,134 @@ const PaperReader = ({ isMaximized = false }: PaperReaderProps) => {
         </div>
       </div>
       <style>{` @media print { .secure-reader-content { display: none !important; } } `}</style>
+    </div>
+  );
+};
+
+const AbstractReader = ({ paper, onExplain }: { paper: any; onExplain: (text: string) => void }) => {
+  const [selectedText, setSelectedText] = useState('');
+
+  const handleMouseUp = () => {
+    const selection = window.getSelection()?.toString().trim();
+    if (selection && selection.length > 10) setSelectedText(selection);
+    else setSelectedText('');
+  };
+
+  return (
+    <div className="h-full flex flex-col items-center overflow-y-auto custom-scrollbar bg-accent/10 p-6 md:p-12">
+      <div className="w-full max-w-2xl space-y-6">
+        {/* External badge */}
+        <div className="flex items-center gap-2">
+          <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 text-[9px] font-black tracking-widest border border-blue-500/20">
+            SEMANTIC SCHOLAR IMPORT
+          </span>
+          <span className="text-[10px] text-muted-foreground">No PDF available — abstract view</span>
+        </div>
+
+        {/* Title */}
+        <div>
+          <h1 className="text-xl font-semibold text-foreground leading-snug tracking-tight mb-4">
+            {paper.title}
+          </h1>
+          <div className="flex flex-wrap gap-4 text-[11px] text-muted-foreground">
+            {paper.authors && (
+              <span className="flex items-center gap-1.5">
+                <Users size={11} className="text-primary/60" />
+                {paper.authors}
+              </span>
+            )}
+            {paper.year && (
+              <span className="flex items-center gap-1.5">
+                <Calendar size={11} className="text-primary/60" />
+                {paper.year}
+              </span>
+            )}
+            {paper.domain && (
+              <span className="flex items-center gap-1.5">
+                <FileText size={11} className="text-primary/60" />
+                {paper.domain}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="border-t border-border/50" />
+
+        {/* Abstract */}
+        {paper.abstract ? (
+          <div
+            className="space-y-3"
+            onMouseUp={handleMouseUp}
+          >
+            <h2 className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.2em]">Abstract</h2>
+            <p className="text-sm text-foreground/80 leading-relaxed selection:bg-primary/20">
+              {paper.abstract}
+            </p>
+            {selectedText && (
+              <motion.div
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex gap-2 pt-1"
+              >
+                <button
+                  onClick={() => { onExplain(selectedText); setSelectedText(''); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-[10px] font-bold hover:opacity-90 transition-opacity"
+                >
+                  <Zap size={11} fill="currentColor" /> Explain selection
+                </button>
+                <button
+                  onClick={() => setSelectedText('')}
+                  className="px-3 py-1.5 border border-border rounded-md text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Dismiss
+                </button>
+              </motion.div>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground italic">No abstract available for this paper.</p>
+        )}
+
+        <div className="border-t border-border/50" />
+
+        {/* Actions */}
+        <div className="space-y-3">
+          <h2 className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.2em]">Access Full Paper</h2>
+          <div className="flex flex-wrap gap-3">
+            {paper.scholar_url && (
+              <a
+                href={paper.scholar_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-4 py-2.5 bg-card border border-border rounded-lg text-[11px] font-semibold text-foreground hover:border-primary/40 hover:bg-accent/30 transition-all"
+              >
+                <ExternalLink size={13} className="text-primary" />
+                View on Semantic Scholar
+              </a>
+            )}
+          </div>
+          <p className="text-[10px] text-muted-foreground leading-relaxed">
+            To enable full PDF reading and text highlighting, download the PDF and re-upload it to your library.
+          </p>
+        </div>
+
+        {/* Concepts */}
+        {paper.concepts && paper.concepts.length > 0 && (
+          <>
+            <div className="border-t border-border/50" />
+            <div className="space-y-3">
+              <h2 className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.2em]">Key Concepts</h2>
+              <div className="flex flex-wrap gap-2">
+                {paper.concepts.map((c: any) => (
+                  <span key={c.id} className="px-2.5 py-1 bg-accent/40 border border-border rounded-full text-[10px] text-foreground/70 font-medium">
+                    {c.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 };
