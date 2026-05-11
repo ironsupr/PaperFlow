@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, useInView, AnimatePresence } from 'framer-motion';
+import { useStore } from '../store/useStore';
 import {
   BrainCircuit, ArrowRight, Network, Sparkles, FileSearch,
   GitBranch, Mic2, Zap, Shield, ChevronRight,
@@ -217,6 +218,9 @@ const TerminalCard = () => {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 const LandingPage = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { user, token } = useStore();
+  const isAuthenticated = !!token;
+  const userReady = !!(token && user);
 
   return (
     <div className="min-h-screen bg-background text-foreground selection:bg-primary/10 font-sans overflow-x-hidden">
@@ -241,15 +245,42 @@ const LandingPage = () => {
 
           {/* Actions */}
           <div className="hidden md:flex items-center gap-3">
-            <Link to="/auth" className="text-sm text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5">
-              Sign in
-            </Link>
-            <Link
-              to="/auth"
-              className="bg-foreground text-background px-4 py-1.5 rounded-md text-sm font-medium hover:opacity-90 transition-opacity"
-            >
-              Get started
-            </Link>
+            {isAuthenticated ? (
+              <>
+                {userReady ? (
+                  <div className="flex items-center gap-2 px-2 py-1">
+                    <div className="w-6 h-6 rounded-full bg-foreground flex items-center justify-center shrink-0">
+                      <span className="text-[10px] font-bold text-background uppercase">
+                        {(user!.full_name || user!.email).slice(0, 2)}
+                      </span>
+                    </div>
+                    <span className="text-sm text-muted-foreground truncate max-w-[120px]">
+                      {user!.full_name || user!.email}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="w-6 h-6 rounded-full bg-border animate-pulse" />
+                )}
+                <Link
+                  to="/workspace"
+                  className="bg-foreground text-background px-4 py-1.5 rounded-md text-sm font-medium hover:opacity-90 transition-opacity"
+                >
+                  Open Workspace
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link to="/auth" className="text-sm text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5">
+                  Sign in
+                </Link>
+                <Link
+                  to="/auth"
+                  className="bg-foreground text-background px-4 py-1.5 rounded-md text-sm font-medium hover:opacity-90 transition-opacity"
+                >
+                  Get started
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </nav>
@@ -309,10 +340,10 @@ const LandingPage = () => {
               className="flex flex-wrap gap-4 justify-center lg:justify-start"
             >
               <Link
-                to="/auth"
+                to={isAuthenticated ? '/workspace' : '/auth'}
                 className="flex items-center gap-2 bg-foreground text-background px-7 py-3 rounded-sm font-semibold text-sm hover:opacity-90 active:scale-95 transition-all shadow-lg"
               >
-                Get Started Free <ArrowRight size={16} />
+                {isAuthenticated ? 'Open Workspace' : 'Get Started Free'} <ArrowRight size={16} />
               </Link>
               <a
                 href="#features"
@@ -575,10 +606,10 @@ const LandingPage = () => {
             </p>
             <div className="flex flex-wrap gap-4 justify-center">
               <Link
-                to="/auth"
+                to={isAuthenticated ? '/workspace' : '/auth'}
                 className="flex items-center gap-2 bg-foreground text-background px-8 py-3.5 rounded-sm font-semibold hover:opacity-90 active:scale-95 transition-all shadow-lg text-sm"
               >
-                Launch Workspace <ArrowRight size={16} />
+                {isAuthenticated ? 'Go to Workspace' : 'Launch Workspace'} <ArrowRight size={16} />
               </Link>
             </div>
           </div>

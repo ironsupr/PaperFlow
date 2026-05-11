@@ -12,8 +12,8 @@ export interface AppPreferences {
 
 export interface User {
   id: number;
-  username: string;
   email: string;
+  full_name: string | null;
   role: UserRole;
 }
 
@@ -188,7 +188,40 @@ export const useStore = create<AppState>((set, get) => ({
   },
   logout: () => {
     localStorage.removeItem('token');
-    set({ user: null, token: null, papers: [], graphData: { nodes: [], edges: [] }, activeReaderId: null, recentlyOpenedPaperIds: [] });
+    set({
+      user: null,
+      token: null,
+      papers: [],
+      graphData: { nodes: [], edges: [] },
+      selectedPaperId: null,
+      selectedMultiPaperIds: [],
+      focusedPaperId: null,
+      activeReaderId: null,
+      floatingReaderIds: [],
+      maximizedReaderId: null,
+      crossPaperAnalysis: null,
+      podcastStatus: 'idle',
+      podcastAudioUrl: null,
+      podcastScript: null,
+      discoveryGaps: null,
+      discoveryNovelty: null,
+      discoveryTrends: null,
+      discoveryIdeas: null,
+      discoveryMethods: null,
+      discoveryFlaws: null,
+      discoveryError: null,
+      reviewerScores: null,
+      reviewerClaims: null,
+      reviewerBias: null,
+      reviewerReport: null,
+      reviewerError: null,
+      recentlyOpenedPaperIds: [],
+      explorerResults: [],
+      activeIntelligenceTab: 'intelligence',
+      activeSidebarView: 'library',
+      leftSidebarVisible: true,
+      rightSidebarVisible: true,
+    });
   },
   role: 'student',
   setRole: (role) => set({ role }),

@@ -24,8 +24,8 @@ interface HighlightData {
 interface UserData {
   id: number;
   email: string;
-  full_name?: string;
-  role?: string;
+  full_name: string | null;
+  role: string;
 }
 
 export const api = {

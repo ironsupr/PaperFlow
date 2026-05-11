@@ -8,38 +8,50 @@ const AuthPage = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({ email: '', password: '', fullName: '' });
+  const [errorMsg, setErrorMsg] = useState('');
   const navigate = useNavigate();
-  const setToken = useStore((state) => state.setToken);
+  const { setToken, fetchCurrentUser } = useStore();
+
+  const doLogin = async (email: string, password: string) => {
+    const resp = await fetch('http://localhost:8000/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ username: email, password }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || 'Login failed');
+    setToken(data.access_token);
+    await fetchCurrentUser();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    
+    setErrorMsg('');
+
     try {
-      const endpoint = isLogin ? '/auth/login' : '/auth/register';
-      const body = isLogin 
-        ? new URLSearchParams({ username: formData.email, password: formData.password })
-        : JSON.stringify({ email: formData.email, password: formData.password, full_name: formData.fullName, role: 'student' });
-
-      const response = await fetch(`http://localhost:8000${endpoint}`, {
-        method: 'POST',
-        headers: isLogin 
-          ? { 'Content-Type': 'application/x-www-form-urlencoded' }
-          : { 'Content-Type': 'application/json' },
-        body,
-      });
-
-      const data = await response.json();
-      
-      if (response.ok) {
-        setToken(data.access_token);
-        navigate('/workspace');
+      if (isLogin) {
+        await doLogin(formData.email, formData.password);
       } else {
-        alert(data.detail || 'Authentication failed');
+        // Register
+        const resp = await fetch('http://localhost:8000/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: formData.email,
+            password: formData.password,
+            full_name: formData.fullName,
+            role: 'student',
+          }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Registration failed');
+        // Auto-login after successful registration
+        await doLogin(formData.email, formData.password);
       }
-    } catch (error) {
-      console.error('Auth error:', error);
-      alert('An error occurred during authentication');
+      navigate('/workspace');
+    } catch (error: any) {
+      setErrorMsg(error.message || 'An error occurred');
     } finally {
       setLoading(false);
     }
@@ -108,8 +120,12 @@ const AuthPage = () => {
             />
           </div>
 
-          <button 
-            type="submit" 
+          {errorMsg && (
+            <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded px-3 py-2">{errorMsg}</p>
+          )}
+
+          <button
+            type="submit"
             disabled={loading}
             className="w-full bg-foreground text-background py-2.5 rounded text-sm font-semibold flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50"
           >
@@ -124,7 +140,7 @@ const AuthPage = () => {
 
         <div className="text-center">
           <button 
-            onClick={() => setIsLogin(!isLogin)}
+            onClick={() => { setIsLogin(!isLogin); setErrorMsg(''); }}
             className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
             {isLogin ? "Don't have an account? Create one" : "Already have an account? Sign in"}

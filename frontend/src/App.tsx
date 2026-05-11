@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import LandingPage from './pages/LandingPage';
 import AuthPage from './pages/AuthPage';
@@ -14,19 +15,28 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 function App() {
+  const { token, fetchCurrentUser } = useStore();
+
+  // Bootstrap user object from stored token on every page load
+  useEffect(() => {
+    if (token) {
+      fetchCurrentUser();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <Router>
       <div className="h-screen w-full bg-background text-foreground overflow-hidden">
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/auth" element={<AuthPage />} />
-          <Route 
-            path="/workspace" 
+          <Route
+            path="/workspace"
             element={
               <ProtectedRoute>
                 <Workspace />
               </ProtectedRoute>
-            } 
+            }
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
